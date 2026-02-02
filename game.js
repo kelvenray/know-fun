@@ -319,7 +319,7 @@ function startGame() {
     score = 0;
     currentSpeed = maxSpeed;
     document.getElementById('start-screen').style.display = 'none';
-    spawnGate(-250); // 更远的初始距离
+    spawnGate(); // 修复：不传参数，使用函数内部的默认距离
 }
 
 function onWindowResize() {
