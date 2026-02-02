@@ -49,21 +49,29 @@ let particles = [];
 let roadLines = [];
 
 // --- Data ---
-const questionBank = [
-    { q: "地球的形状是？", a: "球体", b: "天圆地方", correct: "A" },
-    { q: "地球表面海洋占多少比例？", a: "71%", b: "29%", correct: "A" },
-    { q: "本初子午线是指？", a: "0°经线", b: "180°经线", correct: "A" },
-    { q: "赤道是？", a: "0°纬线", b: "90°纬线", correct: "A" },
-    { q: "七大洲中面积最大的是？", a: "亚洲", b: "非洲", correct: "A" },
-    { q: "世界最高峰是？", a: "珠穆朗玛峰", b: "乞力马扎罗", correct: "A" },
-    { q: "板块构造学说认为地球表层分为几大板块？", a: "六大板块", b: "七大板块", correct: "A" },
-    { q: "下列哪个不是大洲？", a: "大洋洲", b: "北冰洋", correct: "B" }
-];
+let questionBank = [];
 let currentQuestion = null;
 let gateCooldown = 0; 
 
+// --- Async Loader ---
+async function loadQuestions() {
+    try {
+        const response = await fetch('questions.json');
+        questionBank = await response.json();
+        console.log("Questions Loaded:", questionBank.length);
+    } catch (error) {
+        console.error("Failed to load questions:", error);
+        // Fallback data
+        questionBank = [
+            { q: "地球的形状是？", a: "球体", b: "天圆地方", correct: "A" }
+        ];
+    }
+}
+
 // --- Init ---
-function init() {
+async function init() {
+    await loadQuestions();
+
     container = document.getElementById('canvas-container');
     
     // Scene Setup
