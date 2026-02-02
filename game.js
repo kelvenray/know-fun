@@ -237,14 +237,14 @@ function createPlayer() {
                     o.receiveShadow = true;
                     o.material.envMapIntensity = 1;
 
-                    // 暴力匹配：只要不是车身 (Body/Chassis)，就假设是轮子？
-                    // 或者我们把所有名字都变成小写再匹配
+                    // 2. 名称检测 (Name Check)
                     const name = o.name.toLowerCase();
-                    let isWheelByName = name.includes('wheel') || name.includes('tire') || name.includes('rim') || name.includes('cylinder') || name.includes('disk');
+                    // 关键修复：增加 'tyre' (英式拼写)，之前的 'tire' 漏掉了这个模型用的拼写
+                    let isWheelByName = name.includes('wheel') || name.includes('tire') || name.includes('tyre') || name.includes('rim') || name.includes('cylinder') || name.includes('disk');
                     
                     if (isWheelByName) {
                         o.userData.isWheel = true;
-                        console.log(">> Identified as Wheel:", o.name);
+                        console.log(">> Identified as Wheel (Rotatable):", o.name);
                     }
                 }
             });
