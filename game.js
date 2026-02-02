@@ -88,8 +88,8 @@ function init() {
     
     // 1. Bloom
     const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-    bloomPass.threshold = 0;
-    bloomPass.strength = 1.2;
+    bloomPass.threshold = 0.5; // 提高阈值，防止车身和普通物体发光，只有高亮物体才发光
+    bloomPass.strength = 1.0;  // 稍微降低强度
     bloomPass.radius = 0.5;
 
     // 2. Motion Blur
@@ -125,14 +125,14 @@ function init() {
 }
 
 function createLights() {
-    const ambient = new THREE.AmbientLight(0xffffff, 0.5); // 调亮环境光以便看清模型
+    const ambient = new THREE.AmbientLight(0xffffff, 2.0); // 增强环境光，让模型颜色更饱和
     scene.add(ambient);
-    const sunLight = new THREE.DirectionalLight(0xff00ff, 1);
+    const sunLight = new THREE.DirectionalLight(0xff00ff, 2.0); // 增强主光源
     sunLight.position.set(0, 20, -100);
     scene.add(sunLight);
     
     // 增加一个照亮车身的顶光
-    const spotLight = new THREE.DirectionalLight(0x00ffff, 0.8);
+    const spotLight = new THREE.DirectionalLight(0xffffff, 1.5); // 改为白光，还原车漆原色
     spotLight.position.set(0, 50, 20);
     scene.add(spotLight);
 }
@@ -183,12 +183,10 @@ function createTerrain() {
     gridGeo.computeVertexNormals();
 
     const gridMat = new THREE.MeshStandardMaterial({
-        color: 0x000000,
-        emissive: 0xbc13fe, 
-        emissiveIntensity: 0.2,
-        wireframe: true,
-        roughness: 0.5,
-        metalness: 0.8
+        color: 0x111111, // 深灰色沥青
+        roughness: 0.8,
+        metalness: 0.2,
+        wireframe: false // 关闭网格，显示实体地面
     });
 
     terrain = new THREE.Mesh(gridGeo, gridMat);
@@ -230,10 +228,15 @@ function createPlayer() {
             // 材质增强：让车身反光
             model.traverse((o) => {
                 if (o.isMesh) {
+                    // 车轮旋转逻辑需要在这里标记 mesh
+                    // 假设轮子的名字里包含 "Wheel" (通常规范模型都是这样)
+                    if (o.name.includes('Wheel') || o.name.includes('wheel') || o.name.includes('Tire')) {
+                        o.userData.isWheel = true;
+                    }
+                    
                     o.material.envMapIntensity = 1;
                     o.castShadow = true;
                     o.receiveShadow = true;
-                    // 如果有发光材质，保留 emissive
                 }
             });
             
