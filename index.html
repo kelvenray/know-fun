@@ -72,13 +72,24 @@
         /* Mobile Touch Controls */
         #controls-area {
             position: absolute; bottom: 40px; left: 40px;
-            display: flex; /* Always show for now, to ensure visibility on tablets */
-            gap: 20px; z-index: 100;
+            display: flex; /* Always show on all devices for now to ensure visibility */
+            gap: 20px; z-index: 999; /* High z-index to ensure it's on top */
+            pointer-events: none; /* Let container pass touches */
         }
-        @media (min-width: 1025px) {
-            /* Hide on very large desktops unless touch is detected (simplification: hide on desktop) */
-            #controls-area { display: none; }
+        .touch-btn {
+            width: 80px; height: 80px;
+            background: rgba(0, 255, 255, 0.1);
+            border: 2px solid #0ff; border-radius: 50%;
+            color: #0ff; font-size: 30px;
+            display: flex; justify-content: center; align-items: center;
+            pointer-events: auto; cursor: pointer; /* Buttons capture touches */
+            backdrop-filter: blur(4px);
         }
+        .touch-btn:active { background: #0ff; color: #000; }
+        
+        /* Hide only if we are strictly on a non-touch mouse device? 
+           Actually, let's keep them visible. It's safer for debugging.
+        */
         .touch-btn {
             width: 80px; height: 80px;
             background: rgba(0, 255, 255, 0.1);
