@@ -2,62 +2,90 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>Geo Racer: 特工狂飙</title>
+    <title>Geo Racer: 特工狂飙 v0.2</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { margin: 0; overflow: hidden; background-color: #050011; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        
+        /* HUD 样式升级 */
         #hud {
             position: absolute;
-            top: 20px;
+            top: 30px;
             left: 0;
             width: 100%;
             text-align: center;
-            color: #0ff;
             pointer-events: none;
-            text-shadow: 0 0 10px #0ff;
             z-index: 10;
+            display: flex;
+            justify-content: center;
         }
         #question-box {
-            background: rgba(0, 20, 40, 0.8);
+            background: rgba(0, 10, 20, 0.85);
             border: 2px solid #0ff;
-            border-radius: 10px;
-            display: inline-block;
-            padding: 15px 30px;
-            font-size: 24px;
-            max-width: 80%;
-            box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+            border-radius: 12px;
+            padding: 20px 40px;
+            font-size: 28px;
+            font-weight: bold;
+            color: white;
+            max-width: 60%;
+            box-shadow: 0 0 25px rgba(0, 255, 255, 0.4);
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            backdrop-filter: blur(5px);
+            transition: border-color 0.3s;
         }
+        
         #score-board {
             position: absolute;
-            top: 20px;
-            right: 20px;
-            color: #ff0;
-            font-size: 30px;
-            font-weight: bold;
+            top: 30px;
+            right: 30px;
+            color: #ffcc00;
+            font-size: 36px;
+            font-family: 'Impact', sans-serif;
+            text-shadow: 2px 2px 0 #000;
+            z-index: 10;
         }
+        
         #speed-meter {
             position: absolute;
-            bottom: 20px;
-            left: 20px;
-            color: #f0f;
-            font-size: 24px;
-            font-family: monospace;
+            bottom: 30px;
+            left: 30px;
+            color: #ff00ff;
+            font-size: 32px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            text-shadow: 0 0 10px #ff00ff;
+            z-index: 10;
         }
+
+        /* 选项标签样式 */
         .option-label {
             position: absolute;
-            color: white;
+            color: #fff;
             font-weight: bold;
-            font-size: 20px;
-            background: rgba(0,0,0,0.7);
-            padding: 5px 10px;
+            font-size: 24px;
+            background: linear-gradient(90deg, rgba(0,0,0,0.8), rgba(0,0,0,0.4));
+            padding: 10px 20px;
+            border-left: 5px solid #0ff;
             border-radius: 4px;
             pointer-events: none;
-            transform: translate(-50%, -50%);
             white-space: nowrap;
+            text-shadow: 1px 1px 2px black;
+            transition: transform 0.1s;
         }
+        .opt-key {
+            color: #ff00ff;
+            background: #fff;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-right: 10px;
+            font-family: monospace;
+            font-weight: 900;
+        }
+
+        /* 启动屏幕 */
         #start-screen {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9);
+            background: linear-gradient(135deg, #050011 0%, #1a0b2e 100%);
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -65,34 +93,54 @@
             color: white;
             z-index: 20;
         }
-        h1 { font-size: 60px; color: #0ff; text-transform: uppercase; letter-spacing: 5px; margin-bottom: 20px; text-shadow: 0 0 20px #0ff; }
+        h1 { 
+            font-size: 80px; 
+            color: #fff; 
+            text-transform: uppercase; 
+            letter-spacing: 10px; 
+            margin-bottom: 10px; 
+            text-shadow: 
+                0 0 10px #0ff, 
+                0 0 20px #0ff, 
+                0 0 40px #0ff, 
+                0 0 80px #0ff;
+            font-style: italic;
+        }
+        p { font-size: 24px; color: #aaa; letter-spacing: 2px; }
+        
         button {
-            background: linear-gradient(45deg, #f0f, #0ff);
-            border: none;
-            padding: 15px 40px;
-            font-size: 24px;
-            color: white;
+            margin-top: 50px;
+            background: transparent;
+            border: 3px solid #0ff;
+            padding: 20px 60px;
+            font-size: 28px;
+            color: #0ff;
             font-weight: bold;
             cursor: pointer;
-            border-radius: 50px;
-            box-shadow: 0 0 20px rgba(255, 0, 255, 0.5);
-            transition: transform 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
         }
-        button:hover { transform: scale(1.1); }
+        button:hover {
+            background: #0ff;
+            color: #000;
+            box-shadow: 0 0 30px #0ff;
+        }
     </style>
 </head>
 <body>
     <div id="hud">
-        <div id="question-box">系统启动中...</div>
+        <div id="question-box">SYSTEM READY...<br><span style="font-size:16px;color:#888">Awaiting Input</span></div>
     </div>
     <div id="score-board">SCORE: 0</div>
-    <div id="speed-meter">SPEED: 0 km/h</div>
+    <div id="speed-meter">SPEED: 0 KM/H</div>
 
     <div id="start-screen">
         <h1>Geo Racer</h1>
-        <p>左右键控制赛车 · 撞击正确答案加速</p>
-        <br>
-        <button id="start-btn">START MISSION</button>
+        <p>MISSION: GEOGRAPHY</p>
+        <button id="start-btn">Start Engine</button>
     </div>
 
     <!-- 引入 Three.js -->
