@@ -126,11 +126,31 @@ async function init() {
     document.getElementById('btn-campaign').addEventListener('click', startGame);
     
     const nitroBtn = document.getElementById('nitro-btn');
-    const setBoost = (active) => { state.boost = active; };
-    nitroBtn.addEventListener('mousedown', () => setBoost(true));
-    nitroBtn.addEventListener('mouseup', () => setBoost(false));
-    nitroBtn.addEventListener('touchstart', (e) => { e.preventDefault(); setBoost(true); });
-    nitroBtn.addEventListener('touchend', (e) => { e.preventDefault(); setBoost(false); });
+    const setBoost = (active) => { 
+        state.boost = active;
+        nitroBtn.style.background = active ? '#ff0055' : 'rgba(255, 0, 0, 0.2)';
+        nitroBtn.style.color = active ? 'white' : '#ff0055';
+    };
+    
+    // Support both Mouse and Touch
+    const bindBtn = (elem, downFn, upFn) => {
+        elem.addEventListener('mousedown', (e) => { e.preventDefault(); downFn(); });
+        elem.addEventListener('mouseup', (e) => { e.preventDefault(); upFn(); });
+        elem.addEventListener('mouseleave', (e) => { e.preventDefault(); upFn(); });
+        elem.addEventListener('touchstart', (e) => { e.preventDefault(); downFn(); });
+        elem.addEventListener('touchend', (e) => { e.preventDefault(); upFn(); });
+    };
+
+    bindBtn(nitroBtn, () => setBoost(true), () => setBoost(false));
+
+    // Touch Steering
+    const leftBtn = document.getElementById('steer-left');
+    const rightBtn = document.getElementById('steer-right');
+    
+    if (leftBtn && rightBtn) {
+        bindBtn(leftBtn, () => { state.lane = -1; }, () => {}); // Keep lane until changed
+        bindBtn(rightBtn, () => { state.lane = 1; }, () => {});
+    }
 
     animate();
 }

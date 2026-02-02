@@ -54,20 +54,41 @@
 
         #nitro-btn {
             position: absolute; bottom: 40px; right: 40px;
-            width: 120px; height: 120px;
+            width: 100px; height: 100px;
             background: rgba(255, 0, 0, 0.2);
             border: 2px solid #ff0055;
             border-radius: 50%;
             color: #ff0055;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            font-weight: bold; font-size: 18px;
+            font-weight: bold; font-size: 16px;
             pointer-events: auto; cursor: pointer;
             box-shadow: 0 0 20px rgba(255, 0, 85, 0.4);
             transition: all 0.2s;
             backdrop-filter: blur(4px);
+            z-index: 100; user-select: none;
         }
         #nitro-btn:active { background: #ff0055; color: white; transform: scale(0.95); box-shadow: 0 0 50px #ff0055; }
         
+        /* Mobile Touch Controls */
+        #controls-area {
+            position: absolute; bottom: 40px; left: 40px;
+            display: none; /* Show only on touch devices ideally, or always for simplicity */
+            gap: 20px; z-index: 100;
+        }
+        @media (max-width: 800px) {
+            #controls-area { display: flex; }
+            #nitro-btn { width: 80px; height: 80px; right: 20px; bottom: 60px; }
+        }
+        .touch-btn {
+            width: 80px; height: 80px;
+            background: rgba(0, 255, 255, 0.1);
+            border: 2px solid #0ff; border-radius: 50%;
+            color: #0ff; font-size: 30px;
+            display: flex; justify-content: center; align-items: center;
+            pointer-events: auto; cursor: pointer;
+            backdrop-filter: blur(4px);
+        }
+        .touch-btn:active { background: #0ff; color: #000; }
         /* 选项标签 (Follow 3D) */
         .world-label {
             position: absolute;
@@ -211,6 +232,11 @@
             <div id="question-panel">
                 <span id="question-label">Current Objective</span>
                 <div id="question-text">Loading mission data...</div>
+            </div>
+
+            <div id="controls-area">
+                <div id="steer-left" class="touch-btn">◀</div>
+                <div id="steer-right" class="touch-btn">▶</div>
             </div>
 
             <div id="nitro-btn">
