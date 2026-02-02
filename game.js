@@ -237,41 +237,68 @@ function createPlayer() {
                     o.receiveShadow = true;
                     o.material.envMapIntensity = 1;
 
-            // 收集需要修复的轮子，避免在 traverse 过程中修改场景图结构导致遍历中断
+            // --- 智能轮子识别系统 v2.0 (基于位置与尺寸) ---
+            // 既然名字不可靠 (polySurfaceXX)，我们就用几何特征来抓人。
+            
             const wheelsToFix = [];
+            
+            // 1. 先计算整车的包围盒，确定车辆尺寸范围
+            const carBox = new THREE.Box3().setFromObject(model);
+            const carSize = new THREE.Vector3();
+            carBox.getSize(carSize);
+            const carCenter = new THREE.Vector3();
+            carBox.getCenter(carCenter);
+            
+            console.log("Car Dimensions:", carSize, "Center:", carCenter);
+            
+            // 轮子判定阈值：
+            // 1. 高度: 必须在车身下半部分 (Y < carBox.min.y + height * 0.4)
+            // 2. 偏离中心: X 轴必须有一定偏移 (abs(x - cx) > width * 0.3)
+            // 3. 尺寸: 轮子不能太大 (是 Mesh 而不是整个车身 part)，直径通常 < 1.0m
+            
+            const wheelMaxHeight = carBox.min.y + carSize.y * 0.45; // 稍微放宽一点
+            const wheelMinOffsetX = carSize.x * 0.25; 
 
             model.traverse((o) => {
                 if (o.isMesh) {
                     o.castShadow = true;
                     o.receiveShadow = true;
                     o.material.envMapIntensity = 1;
-                    
-                    // DEBUG: 打印所有 Mesh 的名字和位置，彻底排查为什么其他轮子被漏掉了
-                    // console.log("Mesh:", o.name, o.position);
 
-                    // 2. 名称检测 (Name Check) - 极度宽容模式
+                    // 计算 Mesh 的包围盒 (Local -> World 估算)
+                    // 由于还没加入 Scene，我们需要小心处理坐标
+                    // 简单起见，我们假设 Mesh 的 position 代表了它的位置（对于此模型似乎成立）
+                    // 为了更准确，我们用 Geometry 的 BoundingBox + Mesh.position
+                    
+                    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+                    const meshBox = o.geometry.boundingBox.clone();
+                    // 将 Box 变换到 Mesh 的位置 (不考虑旋转，只做粗略位置判断)
+                    meshBox.translate(o.position);
+                    const meshCenter = new THREE.Vector3();
+                    meshBox.getCenter(meshCenter);
+                    const meshSize = new THREE.Vector3();
+                    meshBox.getSize(meshSize);
+
+                    // 特征检测
+                    const isLow = meshCenter.y < wheelMaxHeight;
+                    const isSide = Math.abs(meshCenter.x) > 0.5; // 只要不是在正中间
+                    const isSmall = meshSize.y < 1.0 && meshSize.z < 1.0 && meshSize.x < 1.0; // 轮子大约 0.6-0.8m
+                    
+                    // 名字辅助检测 (如果名字里明确写了 wheel，那肯定是，不管位置在哪)
                     const name = o.name.toLowerCase();
-                    let isWheelByName = name.includes('wheel') || name.includes('tire') || name.includes('tyre') || 
-                                        name.includes('rim') || name.includes('cylinder') || name.includes('disk') || 
-                                        name.includes('brake') || name.includes('rotor') ||
-                                        // 补充常见的命名习惯
-                                        name.includes('fl') || name.includes('fr') || name.includes('bl') || name.includes('br') || // Front-Left, Front-Right...
-                                        name.includes('001') || name.includes('002') || name.includes('003'); // 常见序号
-                    
-                    // 只要名字沾边，且位置较低 (y < 1.0)，大概率就是轮子
-                    // 增加位置辅助判断：轮子肯定在车底
-                    const worldPos = new THREE.Vector3();
-                    o.getWorldPosition(worldPos); // 注意：此时还未 add 到 playerCar，这里获取的是相对 model 的位置
-                    
-                    // 简单粗暴：如果名字里带轮子相关词，直接收录
-                    // 或者如果名字完全无法识别，依靠父级名字？
-                    if (o.parent && (o.parent.name.toLowerCase().includes('wheel') || o.parent.name.toLowerCase().includes('tire'))) {
-                        isWheelByName = true;
-                    }
+                    const isWheelByName = name.includes('wheel') || name.includes('tire') || name.includes('tyre') || name.includes('rim');
 
-                    if (isWheelByName) {
-                        wheelsToFix.push(o);
-                        console.log(`>> Target Locked: ${o.name}`);
+                    // 综合判定
+                    // 如果名字像轮子，或者 (位置低 + 在两侧 + 尺寸小)
+                    if (isWheelByName || (isLow && isSide && isSmall)) {
+                        
+                        // 排除刹车盘/卡钳 (Brake/Caliper)
+                        // 通常刹车盘不应该转，或者跟着轮子转。为了简单，我们让它们一起转。
+                        // 但要排除太小的碎片
+                        if (meshSize.y > 0.2) { 
+                            wheelsToFix.push(o);
+                            console.log(`>> Wheel Detected by ${isWheelByName ? "NAME" : "POS"}: ${o.name} (H:${meshCenter.y.toFixed(2)}, S:${meshSize.y.toFixed(2)})`);
+                        }
                     }
                 }
             });
