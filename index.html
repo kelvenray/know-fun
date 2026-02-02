@@ -72,12 +72,12 @@
         /* Mobile Touch Controls */
         #controls-area {
             position: absolute; bottom: 40px; left: 40px;
-            display: none; /* Show only on touch devices ideally, or always for simplicity */
+            display: flex; /* Always show for now, to ensure visibility on tablets */
             gap: 20px; z-index: 100;
         }
-        @media (max-width: 800px) {
-            #controls-area { display: flex; }
-            #nitro-btn { width: 80px; height: 80px; right: 20px; bottom: 60px; }
+        @media (min-width: 1025px) {
+            /* Hide on very large desktops unless touch is detected (simplification: hide on desktop) */
+            #controls-area { display: none; }
         }
         .touch-btn {
             width: 80px; height: 80px;
