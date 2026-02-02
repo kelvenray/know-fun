@@ -239,12 +239,43 @@ function createPlayer() {
 
                     // 2. 名称检测 (Name Check)
                     const name = o.name.toLowerCase();
-                    // 关键修复：增加 'tyre' (英式拼写)，之前的 'tire' 漏掉了这个模型用的拼写
-                    let isWheelByName = name.includes('wheel') || name.includes('tire') || name.includes('tyre') || name.includes('rim') || name.includes('cylinder') || name.includes('disk');
+                    // 扩大检测范围，包含轮毂(rim)、刹车(brake/disc)等
+                    let isWheelByName = name.includes('wheel') || name.includes('tire') || name.includes('tyre') || 
+                                        name.includes('rim') || name.includes('cylinder') || name.includes('disk') || 
+                                        name.includes('brake') || name.includes('rotor');
                     
                     if (isWheelByName) {
                         o.userData.isWheel = true;
-                        console.log(">> Identified as Wheel (Rotatable):", o.name);
+                        
+                        // --- 关键修复：修正轮子几何中心 (Pivot Fix) ---
+                        // 解决“绕圈公转”问题：将几何体顶点移回局部原点 (0,0,0)，并将 Mesh 移动到原来的几何中心位置。
+                        o.geometry.computeBoundingBox();
+                        const center = new THREE.Vector3();
+                        o.geometry.boundingBox.getCenter(center);
+                        
+                        // 如果几何中心偏移较大，说明原点不对
+                        if (center.lengthSq() > 0.0001) {
+                            // 1. 把几何体顶点平移到以 (0,0,0) 为中心
+                            o.geometry.translate(-center.x, -center.y, -center.z);
+                            
+                            // 2. 补偿 Mesh 的位置，使其视觉位置不变
+                            // 注意：需要考虑 Mesh 自身的缩放和旋转 (将局部偏移转换为父级空间偏移)
+                            // center 是局部坐标，需要应用 Mesh 的旋转和缩放才能加到 position 上
+                            const offset = center.clone();
+                            
+                            // 应用缩放
+                            offset.multiply(o.scale);
+                            
+                            // 应用旋转
+                            offset.applyQuaternion(o.quaternion);
+                            
+                            // 移动 Mesh
+                            o.position.add(offset);
+                            
+                            console.log(`>> Fixed Pivot for ${o.name}: Offset ${offset.toArray()}`);
+                        } else {
+                            console.log(`>> Identified Wheel ${o.name} (Pivot OK)`);
+                        }
                     }
                 }
             });
@@ -435,10 +466,12 @@ function updatePhysics(dt) {
     if (playerCar) {
         playerCar.traverse((o) => {
             if (o.userData.isWheel) {
-                // 绕 X 轴旋转 (标准 GLTF 车辆通常是 X 轴为轮轴)
-                // 如果模型坐标系不同，可能是 Z 轴。
-                // 试错：如果轮子歪着转，就改这里。
-                o.rotation.x += state.speed * 0.5; 
+                // 绕 X 轴旋转 (大多数车辆模型的标准轴向)
+                // 如果发现有的轮子不动，可能是因为它们是左右对称的实例，
+                // 左轮绕 +X 转，右轮绕 -X 转，或者轴向不同。
+                // 观察截图：左前轮在“公转”，说明原点偏离极大。
+                // 现在上面的 Pivot Fix 应该能解决这个问题。
+                o.rotation.x -= state.speed * 0.5; // 尝试反向，看看效果
             }
         });
     }
