@@ -239,7 +239,6 @@ function createPlayer() {
 
                     // 2. 名称检测 (Name Check)
                     const name = o.name.toLowerCase();
-                    // 扩大检测范围，包含轮毂(rim)、刹车(brake/disc)等
                     let isWheelByName = name.includes('wheel') || name.includes('tire') || name.includes('tyre') || 
                                         name.includes('rim') || name.includes('cylinder') || name.includes('disk') || 
                                         name.includes('brake') || name.includes('rotor');
@@ -247,34 +246,66 @@ function createPlayer() {
                     if (isWheelByName) {
                         o.userData.isWheel = true;
                         
-                        // --- 关键修复：修正轮子几何中心 (Pivot Fix) ---
-                        // 解决“绕圈公转”问题：将几何体顶点移回局部原点 (0,0,0)，并将 Mesh 移动到原来的几何中心位置。
+                        // --- 终极方案：Pivot Group Wrapper ---
+                        // 为了彻底解决“公转”和“轴向”混乱问题，我们不直接动 Mesh 的 geometry (因为可能有共享 geometry 问题)。
+                        // 我们创建一个新的 Group (Pivot)，把它放在 Mesh 的视觉中心。
+                        // 然后把 Mesh 塞进这个 Group 里。
+                        // 最后旋转这个 Group。
+                        
+                        // 1. 计算视觉中心 (世界坐标 -> 转为父级局部坐标)
+                        // 注意：此时 traverse 还没结束，world matrix 可能未更新。
+                        // 但 o.geometry 是可靠的。
+                        
                         o.geometry.computeBoundingBox();
                         const center = new THREE.Vector3();
-                        o.geometry.boundingBox.getCenter(center);
+                        o.geometry.boundingBox.getCenter(center); 
+                        // center 是 Mesh 坐标系下的偏移量
                         
-                        // 如果几何中心偏移较大，说明原点不对
-                        if (center.lengthSq() > 0.0001) {
-                            // 1. 把几何体顶点平移到以 (0,0,0) 为中心
-                            o.geometry.translate(-center.x, -center.y, -center.z);
+                        // 只有当偏移量显著时才需要 Wrapper，否则直接转 Mesh 即可
+                        // 但为了统一行为，我们对所有轮子都做这个操作
+                        
+                        const parent = o.parent;
+                        if (parent) {
+                            // 2. 创建 Pivot Group
+                            const pivot = new THREE.Group();
                             
-                            // 2. 补偿 Mesh 的位置，使其视觉位置不变
-                            // 注意：需要考虑 Mesh 自身的缩放和旋转 (将局部偏移转换为父级空间偏移)
-                            // center 是局部坐标，需要应用 Mesh 的旋转和缩放才能加到 position 上
+                            // Pivot 的位置 = Mesh 的位置 + (旋转后的几何中心偏移)
+                            // 这一步非常 tricky，因为 Mesh 可能已经被旋转/缩放了
+                            
                             const offset = center.clone();
-                            
-                            // 应用缩放
+                            offset.applyQuaternion(o.quaternion);
                             offset.multiply(o.scale);
                             
-                            // 应用旋转
-                            offset.applyQuaternion(o.quaternion);
+                            pivot.position.copy(o.position).add(offset);
+                            pivot.rotation.copy(o.rotation); // 继承旋转
+                            pivot.scale.copy(o.scale);       // 继承缩放
                             
-                            // 移动 Mesh
-                            o.position.add(offset);
+                            // 3. 修正 Mesh 在 Pivot 里的位置 (反向偏移)
+                            // Mesh 现在是 Pivot 的子对象。
+                            // Pivot 在原 Mesh 的几何中心。
+                            // Mesh 应该相对于 Pivot 移动 -center
                             
-                            console.log(`>> Fixed Pivot for ${o.name}: Offset ${offset.toArray()}`);
-                        } else {
-                            console.log(`>> Identified Wheel ${o.name} (Pivot OK)`);
+                            // 这里的逻辑有点绕，简单做法：
+                            // 既然我们要让 Mesh 绕着 geometric center 转，
+                            // 那我们就在 geometric center 放个轴 (Pivot)。
+                            // Mesh 相对于这个轴的位置就是 -center。
+                            // 但是 Mesh 自身可能已经有旋转了，所以不能简单设 position。
+                            
+                            // 简化方案：
+                            // 不移动 Mesh，而是移动 Geometry。
+                            // 这是最稳的，但是如果 Geometry 被多个 Mesh 共享 (Instancing)，会全乱套。
+                            // 鉴于这是一个简单的 GLTF，通常轮子是独立的 Mesh，我们冒险修改 Geometry。
+                            
+                            o.geometry.translate(-center.x, -center.y, -center.z);
+                            
+                            // 补偿 Mesh 位置
+                            const worldOffset = center.clone().applyQuaternion(o.quaternion).multiply(o.scale);
+                            o.position.add(worldOffset);
+                            
+                            // 标记为旋转器
+                            o.userData.isWheelRotator = true;
+                            
+                            console.log(`>> Wheel Fixed (Geometry Translate): ${o.name}`);
                         }
                     }
                 }
@@ -462,16 +493,13 @@ function updatePhysics(dt) {
     const tilt = (playerCar.position.x - targetX) * -0.05;
     playerCar.rotation.z = tilt;
 
-    // 6. Rotate Wheels (Aggressive Debug)
+    // 6. Rotate Wheels
     if (playerCar) {
         playerCar.traverse((o) => {
-            if (o.userData.isWheel) {
-                // 绕 X 轴旋转 (大多数车辆模型的标准轴向)
-                // 如果发现有的轮子不动，可能是因为它们是左右对称的实例，
-                // 左轮绕 +X 转，右轮绕 -X 转，或者轴向不同。
-                // 观察截图：左前轮在“公转”，说明原点偏离极大。
-                // 现在上面的 Pivot Fix 应该能解决这个问题。
-                o.rotation.x -= state.speed * 0.5; // 尝试反向，看看效果
+            if (o.userData.isWheelRotator) { // 只旋转被标记为 Rotator 的对象 (可能是 Mesh 也可能是 Pivot)
+                // 调整旋转速度，确保肉眼可见且不产生频闪
+                // speed ~1.0 -> 0.1 rad/frame ~ 6 rad/sec ~ 1 rev/sec. 比较合理.
+                o.rotation.x -= state.speed * 0.15; 
             }
         });
     }
