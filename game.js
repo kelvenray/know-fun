@@ -1,9 +1,10 @@
-// ... (之前的 imports 保持不变)
+// ... (imports)
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'; // 引入加载器
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { AfterimagePass } from 'three/addons/postprocessing/AfterimagePass.js'; // 引入动态模糊 Pass
+import { AfterimagePass } from 'three/addons/postprocessing/AfterimagePass.js';
 
 // --- Global State ---
 const state = {
@@ -37,11 +38,12 @@ const CFG = {
 let scene, camera, renderer, composer;
 let clock = new THREE.Clock();
 let container;
+let loader = new GLTFLoader(); // Loader 实例
 
 // --- Game Objects ---
 let playerCar;
 let terrain; 
-let buildings = []; // 赛博城市建筑群
+let buildings = []; 
 let obstacles = [];
 let particles = [];
 let roadLines = [];
@@ -78,31 +80,32 @@ function init() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.toneMapping = THREE.ReinhardToneMapping;
+    renderer.toneMappingExposure = 1.2; // 稍微调亮一点以展示车漆
     container.appendChild(renderer.domElement);
 
     // Post Processing Pipeline
     const renderScene = new RenderPass(scene, camera);
     
-    // 1. Bloom (光晕)
+    // 1. Bloom
     const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
     bloomPass.threshold = 0;
     bloomPass.strength = 1.2;
     bloomPass.radius = 0.5;
 
-    // 2. Motion Blur (动态模糊) - 使用 AfterimagePass 模拟残影
+    // 2. Motion Blur
     const afterimagePass = new AfterimagePass();
-    afterimagePass.uniforms["damp"].value = 0.6; // 降低模糊强度 (0.85 -> 0.6)，防止眼花
+    afterimagePass.uniforms["damp"].value = 0.6; 
 
     composer = new EffectComposer(renderer);
     composer.addPass(renderScene);
     composer.addPass(bloomPass);
-    composer.addPass(afterimagePass); // Add Blur
+    composer.addPass(afterimagePass); 
 
     // Environment
     createLights();
     createTerrain(); 
-    createCity(); // New: Cyber City
-    createPlayer();
+    createCity(); 
+    createPlayer(); // Will load GLTF asynchronously
 
     // Event Listeners
     window.addEventListener('resize', onWindowResize);
@@ -122,21 +125,19 @@ function init() {
 }
 
 function createLights() {
-    const ambient = new THREE.AmbientLight(0xffffff, 0.2);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.5); // 调亮环境光以便看清模型
     scene.add(ambient);
     const sunLight = new THREE.DirectionalLight(0xff00ff, 1);
     sunLight.position.set(0, 20, -100);
     scene.add(sunLight);
+    
+    // 增加一个照亮车身的顶光
+    const spotLight = new THREE.DirectionalLight(0x00ffff, 0.8);
+    spotLight.position.set(0, 50, 20);
+    scene.add(spotLight);
 }
 
-// --- Procedural Generation ---
-
 function createCity() {
-    // 生成两侧的随机赛博建筑
-    const geometry = new THREE.BoxGeometry(1, 1, 1);
-    
-    // 实例化渲染以提升性能 (InstancedMesh) 
-    // 但为了简单和每个楼不同的颜色/发光，这里先用普通 Mesh 列表，控制数量
     for (let i = 0; i < 40; i++) {
         createBuilding();
     }
@@ -150,18 +151,16 @@ function createBuilding() {
     const geo = new THREE.BoxGeometry(width, height, depth);
     const mat = new THREE.MeshStandardMaterial({
         color: 0x111111,
-        emissive: Math.random() > 0.5 ? 0x00ffff : 0xff00ff, // 随机霓虹色
+        emissive: Math.random() > 0.5 ? 0x00ffff : 0xff00ff, 
         emissiveIntensity: Math.random() * 0.5,
         roughness: 0.1,
         metalness: 0.8
     });
     
     const mesh = new THREE.Mesh(geo, mat);
-    
-    // 随机分布在跑道两侧远处
     const side = Math.random() > 0.5 ? 1 : -1;
-    const x = side * (30 + Math.random() * 50); // 离路边有一段距离
-    const z = -Math.random() * 200; // 初始分布在前方
+    const x = side * (30 + Math.random() * 50); 
+    const z = -Math.random() * 200; 
     
     mesh.position.set(x, height/2 - 10, z);
     scene.add(mesh);
@@ -169,7 +168,6 @@ function createBuilding() {
 }
 
 function createTerrain() {
-    // 1. Endless Grid Floor
     const gridGeo = new THREE.PlaneGeometry(400, 400, 80, 80);
     const pos = gridGeo.attributes.position;
     for (let i = 0; i < pos.count; i++) {
@@ -198,7 +196,6 @@ function createTerrain() {
     terrain.position.z = -100; 
     scene.add(terrain);
 
-    // 2. Road Lines
     const lineGeo = new THREE.BoxGeometry(0.5, 0.1, 400);
     const lineMat = new THREE.MeshBasicMaterial({ color: 0x00ffff }); 
     const leftLine = new THREE.Mesh(lineGeo, lineMat);
@@ -214,8 +211,62 @@ function createTerrain() {
 
 function createPlayer() {
     playerCar = new THREE.Group();
-    // (Previous car code...)
-    // Futuristic Chassis
+    scene.add(playerCar);
+    
+    // Placeholder while loading
+    // ... 可以放个方块 ...
+    
+    // Load Real Model
+    loader.load(
+        'assets/car.glb', 
+        function (gltf) {
+            const model = gltf.scene;
+            
+            // 调整模型大小和方向（每个模型不一样，通常需要试错）
+            model.scale.set(2.5, 2.5, 2.5); 
+            model.rotation.y = Math.PI; // 通常模型是朝前的，我们这里可能需要转180度
+            model.position.y = 0;
+            
+            // 材质增强：让车身反光
+            model.traverse((o) => {
+                if (o.isMesh) {
+                    o.material.envMapIntensity = 1;
+                    o.castShadow = true;
+                    o.receiveShadow = true;
+                    // 如果有发光材质，保留 emissive
+                }
+            });
+            
+            playerCar.add(model);
+            
+            // 添加尾焰 (引擎发光)
+            const engineGeo = new THREE.BoxGeometry(0.5, 0.2, 0.1);
+            const engineMat = new THREE.MeshBasicMaterial({ color: 0xff0055 });
+            const engine = new THREE.Mesh(engineGeo, engineMat);
+            engine.position.set(0, 0.8, 2.2); // 调整到兰博基尼排气管位置
+            playerCar.add(engine);
+
+            const light = new THREE.PointLight(0xff0055, 2, 8);
+            light.position.set(0, 1, 3);
+            playerCar.add(light);
+            
+            console.log("Car Loaded!");
+        },
+        undefined,
+        function (error) {
+            console.error(error);
+            // Fallback to Box Car if failed
+            createBoxCar();
+        }
+    );
+
+    playerCar.position.y = 0.5;
+    playerCar.position.x = -CFG.laneWidth / 2;
+    state.lane = -1;
+}
+
+function createBoxCar() {
+    // Futuristic Chassis (Fallback)
     const chassisGeo = new THREE.BufferGeometry();
     const vertices = new Float32Array([
         0, 1, 2,  -1.5, 0.5, 2,  1.5, 0.5, 2, 
@@ -235,34 +286,8 @@ function createPlayer() {
     });
     const chassis = new THREE.Mesh(chassisGeo, chassisMat);
     playerCar.add(chassis);
-
-    const stripGeo = new THREE.BoxGeometry(0.1, 0.1, 4.5);
-    const stripMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
-    const leftStrip = new THREE.Mesh(stripGeo, stripMat);
-    leftStrip.position.set(-0.8, 0.6, -0.2);
-    playerCar.add(leftStrip);
-    const rightStrip = new THREE.Mesh(stripGeo, stripMat);
-    rightStrip.position.set(0.8, 0.6, -0.2);
-    playerCar.add(rightStrip);
-
-    const engineGeo = new THREE.BoxGeometry(1, 0.5, 0.1);
-    const engineMat = new THREE.MeshBasicMaterial({ color: 0xff0055 });
-    const engine = new THREE.Mesh(engineGeo, engineMat);
-    engine.position.set(0, 0.6, 2.05);
-    playerCar.add(engine);
-
-    const light = new THREE.PointLight(0xff0055, 2, 10);
-    light.position.set(0, 1, 3);
-    playerCar.add(light);
-
-    playerCar.position.y = 0.5;
-    playerCar.position.x = -CFG.laneWidth / 2;
-    state.lane = -1;
-
-    scene.add(playerCar);
 }
 
-// ... (spawnGate, createGateMesh, handleCollision same as before) ...
 function spawnGate() {
     if (gateCooldown > 0) return;
     currentQuestion = questionBank[Math.floor(Math.random() * questionBank.length)];
@@ -346,10 +371,8 @@ function updatePhysics(dt) {
     // 2. City Loop
     buildings.forEach(b => {
         b.position.z += moveDist;
-        // 如果楼移出背后，重置到前方远处
         if (b.position.z > 50) {
             b.position.z = -250 - Math.random() * 100;
-            // 也可以随机改变高度
             b.scale.y = 1 + Math.random(); 
         }
     });
