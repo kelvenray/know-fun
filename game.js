@@ -92,9 +92,12 @@ function init() {
     bloomPass.strength = 1.0;  // 稍微降低强度
     bloomPass.radius = 0.5;
 
-    // 2. Motion Blur
+    // 2. Motion Blur (动态模糊) - 使用 AfterimagePass 模拟残影
     const afterimagePass = new AfterimagePass();
-    afterimagePass.uniforms["damp"].value = 0.6; 
+    afterimagePass.uniforms["damp"].value = 0.0; // 默认关闭，只在加速时开启
+
+    // Export pass to global scope for dynamic update
+    window.blurPass = afterimagePass; 
 
     composer = new EffectComposer(renderer);
     composer.addPass(renderScene);
@@ -229,11 +232,14 @@ function createPlayer() {
             model.traverse((o) => {
                 if (o.isMesh) {
                     // 识别车轮
-                    if (o.name.toLowerCase().includes('wheel') || o.name.toLowerCase().includes('tire')) {
+                    // 大小写敏感修复：很多模型叫 "Wheel" 或 "WHEEL"
+                    if (o.name.toLowerCase().includes('wheel') || o.name.toLowerCase().includes('tire') || o.name.toLowerCase().includes('rim')) {
                         o.userData.isWheel = true;
-                        // 修正车轮中心点问题（如果需要）
                     }
-
+                    
+                    // 尝试修复轮子中心点问题：如果轮子是作为子对象挂在某个 Pivot 下，旋转那个 Pivot 可能更好
+                    // 但通常直接旋转 Mesh 也行，除非原点不对。
+                    
                     o.material.envMapIntensity = 1;
                     o.castShadow = true;
                     o.receiveShadow = true;
@@ -401,10 +407,19 @@ function updatePhysics(dt) {
     
     if (gateCooldown > 0) gateCooldown -= dt * 1000;
 
+    // 3. Camera Effects (FOV Boost & Blur Control)
     const targetFov = state.boost ? 110 : CFG.fovBase; 
     camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, dt * 3);
     camera.updateProjectionMatrix();
     camera.position.y = CFG.cameraHeight + Math.sin(clock.elapsedTime * 5) * 0.05 + (state.boost ? (Math.random()*0.1) : 0);
+
+    // Dynamic Motion Blur Intensity
+    if (window.blurPass) {
+        // 如果在加速 (Boost)，则开启模糊 (damp -> 0.7)
+        // 如果正常行驶，则关闭模糊 (damp -> 0.0)
+        const targetBlur = state.boost ? 0.7 : 0.0;
+        window.blurPass.uniforms["damp"].value = THREE.MathUtils.lerp(window.blurPass.uniforms["damp"].value, targetBlur, dt * 5);
+    }
 
     updateLabels();
 
