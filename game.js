@@ -245,26 +245,46 @@ function createPlayer() {
                     o.castShadow = true;
                     o.receiveShadow = true;
                     o.material.envMapIntensity = 1;
+                    
+                    // DEBUG: 打印所有 Mesh 的名字和位置，彻底排查为什么其他轮子被漏掉了
+                    // console.log("Mesh:", o.name, o.position);
 
-                    // 2. 名称检测 (Name Check)
+                    // 2. 名称检测 (Name Check) - 极度宽容模式
                     const name = o.name.toLowerCase();
                     let isWheelByName = name.includes('wheel') || name.includes('tire') || name.includes('tyre') || 
                                         name.includes('rim') || name.includes('cylinder') || name.includes('disk') || 
-                                        name.includes('brake') || name.includes('rotor');
+                                        name.includes('brake') || name.includes('rotor') ||
+                                        // 补充常见的命名习惯
+                                        name.includes('fl') || name.includes('fr') || name.includes('bl') || name.includes('br') || // Front-Left, Front-Right...
+                                        name.includes('001') || name.includes('002') || name.includes('003'); // 常见序号
                     
+                    // 只要名字沾边，且位置较低 (y < 1.0)，大概率就是轮子
+                    // 增加位置辅助判断：轮子肯定在车底
+                    const worldPos = new THREE.Vector3();
+                    o.getWorldPosition(worldPos); // 注意：此时还未 add 到 playerCar，这里获取的是相对 model 的位置
+                    
+                    // 简单粗暴：如果名字里带轮子相关词，直接收录
+                    // 或者如果名字完全无法识别，依靠父级名字？
+                    if (o.parent && (o.parent.name.toLowerCase().includes('wheel') || o.parent.name.toLowerCase().includes('tire'))) {
+                        isWheelByName = true;
+                    }
+
                     if (isWheelByName) {
                         wheelsToFix.push(o);
+                        console.log(`>> Target Locked: ${o.name}`);
                     }
                 }
             });
 
             // 统一修复轮子 (Fix Logic)
             wheelsToFix.forEach(o => {
+                // 防止重复处理
+                if (o.userData.processed) return;
+                o.userData.processed = true;
+
                 o.userData.isWheel = true;
                 
                 // --- Clone Geometry ---
-                // 关键：防止多个轮子共享同一个几何体 (Instancing)。
-                // 如果不克隆，修改一个轮子的几何体原点会影响所有共享该几何体的轮子，导致它们位置错乱。
                 o.geometry = o.geometry.clone();
 
                 // --- Pivot Group Wrapper ---
@@ -279,7 +299,6 @@ function createPlayer() {
                     const pivot = new THREE.Group();
                     
                     // 计算 Pivot 应该在的世界位置 (相对于父级)
-                    // Pivot Pos = Mesh Pos + (Rotated & Scaled Center Offset)
                     const offset = center.clone();
                     offset.applyQuaternion(o.quaternion);
                     offset.multiply(o.scale);
@@ -290,24 +309,27 @@ function createPlayer() {
                     
                     // 3. 将 Pivot 插入到层级中
                     parent.add(pivot);
-                    pivot.add(o); // 将轮子 Mesh 移入 Pivot
                     
-                    // 4. 归零 Mesh 的位置和旋转 (因为它现在是 Pivot 的子集)
-                    // Mesh 的新位置应该是相对于 Pivot 的反向偏移
-                    // 但最稳妥的方法是直接修改 Geometry 顶点，让 Mesh 归零。
+                    // 关键步骤：把 Mesh 从原来的 parent 移除，加到 pivot 中
+                    // 注意：add() 会自动从原 parent 移除，不需要手动 remove
+                    pivot.add(o); 
                     
+                    // 4. 归零 Mesh 的位置和旋转
                     o.geometry.translate(-center.x, -center.y, -center.z);
-                    
                     o.position.set(0, 0, 0);
                     o.rotation.set(0, 0, 0);
-                    o.scale.set(1, 1, 1); // Scale 已经在 Pivot 上应用了
+                    o.scale.set(1, 1, 1); 
                     
-                    // 标记 Pivot 为旋转目标，而不是 Mesh
-                    // 因为我们想转动的是 Pivot (轴心)
+                    // 标记 Pivot 为旋转目标
                     pivot.userData.isWheelRotator = true;
                     pivot.name = "Pivot_" + o.name;
                     
-                    console.log(`>> Wheel Fixed & Cloned: ${o.name}`);
+                    // 强制标记左右轮，用于反向旋转 (以防 UV 也是反的)
+                    // 如果 x > 0 则是左轮(或右轮，取决于模型坐标系)，反之亦然
+                    // 我们可以根据 pivot 的初始 x 坐标来判断
+                    pivot.userData.side = pivot.position.x > 0 ? 1 : -1;
+
+                    console.log(`>> Wheel Fixed & Cloned: ${o.name} (Parent: ${parent.name})`);
                 }
             });
             
