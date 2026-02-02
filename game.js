@@ -71,8 +71,16 @@ function init() {
 
     // 事件监听
     document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keyup', onKeyUp); // 监听松开按键
     window.addEventListener('resize', onWindowResize);
     document.getElementById('start-btn').addEventListener('click', startGame);
+    
+    // 触摸/鼠标按钮支持
+    const boostBtn = document.getElementById('boost-btn');
+    boostBtn.addEventListener('mousedown', () => activateBoost(true));
+    boostBtn.addEventListener('mouseup', () => activateBoost(false));
+    boostBtn.addEventListener('touchstart', (e) => { e.preventDefault(); activateBoost(true); });
+    boostBtn.addEventListener('touchend', (e) => { e.preventDefault(); activateBoost(false); });
 
     animate();
 }
@@ -280,6 +288,11 @@ function updateLabels() {
 function onKeyDown(event) {
     if (!isGameRunning) return;
     
+    // Space / W / Up Arrow -> Boost
+    if (event.code === 'Space' || event.key === 'w' || event.key === 'ArrowUp') {
+        activateBoost(true);
+    }
+    
     // A / Left Arrow
     if (event.key === 'a' || event.key === 'ArrowLeft') {
         if (lane === 1) {
@@ -369,11 +382,31 @@ function animate() {
         // 相机轻微晃动
         camera.position.y = 4 + Math.sin(frameCount * 0.1) * 0.05;
         
+        // 相机 FOV 动态调整 (简易版 Tween，不引入外部库)
+        if (isBoosting) {
+            camera.fov = THREE.MathUtils.lerp(camera.fov, 90, 0.1);
+        } else {
+            camera.fov = THREE.MathUtils.lerp(camera.fov, 60, 0.1);
+        }
+        camera.updateProjectionMatrix();
+        
         document.getElementById('speed-meter').innerText = `SPEED: ${Math.floor(currentSpeed * 300)} KM/H`;
         updateLabels();
     }
 
     renderer.render(scene, camera);
+}
+
+// 状态变量
+let isBoosting = false;
+
+function activateBoost(active) {
+    isBoosting = active;
+    if (active) {
+        currentSpeed = 4.0; // 超级加速
+    } else {
+        currentSpeed = maxSpeed;
+    }
 }
 
 function handleCollision(gate) {
