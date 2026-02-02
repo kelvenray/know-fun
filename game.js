@@ -91,7 +91,7 @@ function init() {
 
     // 2. Motion Blur (动态模糊) - 使用 AfterimagePass 模拟残影
     const afterimagePass = new AfterimagePass();
-    afterimagePass.uniforms["damp"].value = 0.85; // 模糊强度 (越高残影越重)
+    afterimagePass.uniforms["damp"].value = 0.6; // 降低模糊强度 (0.85 -> 0.6)，防止眼花
 
     composer = new EffectComposer(renderer);
     composer.addPass(renderScene);
