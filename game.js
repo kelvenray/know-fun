@@ -17,8 +17,8 @@ const state = {
 // --- Constants ---
 const CFG = {
     laneWidth: 10,
-    baseSpeed: 0.8,
-    boostSpeed: 2.5,
+    baseSpeed: 1.0,  // 稍微提升基础速度
+    boostSpeed: 6.0, // NITRO 速度翻倍！(2.5 -> 6.0)
     cameraHeight: 5,
     cameraDist: 14,
     fovBase: 60,
@@ -377,8 +377,8 @@ function updatePhysics(dt) {
     if (gateCooldown > 0) gateCooldown -= dt * 1000;
 
     // 3. Camera Effects (FOV Boost)
-    const targetFov = state.boost ? CFG.fovBoost : CFG.fovBase;
-    camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, dt * 2);
+    const targetFov = state.boost ? 110 : CFG.fovBase; // FOV 拉得更开，增强速度感
+    camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, dt * 3);
     camera.updateProjectionMatrix();
 
     // Camera Shake
