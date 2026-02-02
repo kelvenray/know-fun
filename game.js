@@ -462,7 +462,7 @@ function createGateMesh(x, z, text, type) {
     obstacles.push(group);
     const label = document.createElement('div');
     label.className = 'world-label';
-    label.innerHTML = `<span class="key-hint">${x < 0 ? 'A' : 'B'}</span> ${text}`;
+    label.innerHTML = `<span class="key-hint">${x < 0 ? 'A' : 'B'}</span> <div class="answer-text">${text}</div>`;
     document.body.appendChild(label);
     group.userData.domElement = label;
 }

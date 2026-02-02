@@ -77,9 +77,25 @@
             padding: 8px 16px; border-radius: 4px;
             text-shadow: 0 2px 2px black;
             pointer-events: none;
-            white-space: nowrap;
+            /* Flex layout for alignment */
+            display: flex; align-items: center;
+            /* Limit width to prevent overlap */
+            max-width: 250px;
+            text-align: left;
         }
-        .key-hint { display: inline-block; background: #0ff; color: black; padding: 2px 6px; border-radius: 3px; margin-right: 8px; font-size: 16px; }
+        .answer-text {
+            white-space: normal; /* Allow text wrapping */
+            line-height: 1.2;
+            font-size: 16px;     /* Slightly smaller font for long text */
+        }
+        .key-hint { 
+            display: flex; align-items: center; justify-content: center;
+            background: #0ff; color: black; 
+            min-width: 24px; height: 24px; /* Fixed square size */
+            border-radius: 4px; margin-right: 10px; 
+            font-size: 16px; font-weight: 800;
+            flex-shrink: 0; /* Prevent shrinking */
+        }
 
         /* Main Menu System */
         #main-menu {
