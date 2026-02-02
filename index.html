@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Geo Racer: 特工狂飙</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            color: #0ff;
+            pointer-events: none;
+            text-shadow: 0 0 10px #0ff;
+            z-index: 10;
+        }
+        #question-box {
+            background: rgba(0, 20, 40, 0.8);
+            border: 2px solid #0ff;
+            border-radius: 10px;
+            display: inline-block;
+            padding: 15px 30px;
+            font-size: 24px;
+            max-width: 80%;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+        }
+        #score-board {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: #ff0;
+            font-size: 30px;
+            font-weight: bold;
+        }
+        #speed-meter {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            color: #f0f;
+            font-size: 24px;
+            font-family: monospace;
+        }
+        .option-label {
+            position: absolute;
+            color: white;
+            font-weight: bold;
+            font-size: 20px;
+            background: rgba(0,0,0,0.7);
+            padding: 5px 10px;
+            border-radius: 4px;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+            white-space: nowrap;
+        }
+        #start-screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 20;
+        }
+        h1 { font-size: 60px; color: #0ff; text-transform: uppercase; letter-spacing: 5px; margin-bottom: 20px; text-shadow: 0 0 20px #0ff; }
+        button {
+            background: linear-gradient(45deg, #f0f, #0ff);
+            border: none;
+            padding: 15px 40px;
+            font-size: 24px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 50px;
+            box-shadow: 0 0 20px rgba(255, 0, 255, 0.5);
+            transition: transform 0.2s;
+        }
+        button:hover { transform: scale(1.1); }
+    </style>
+</head>
+<body>
+    <div id="hud">
+        <div id="question-box">系统启动中...</div>
+    </div>
+    <div id="score-board">SCORE: 0</div>
+    <div id="speed-meter">SPEED: 0 km/h</div>
+
+    <div id="start-screen">
+        <h1>Geo Racer</h1>
+        <p>左右键控制赛车 · 撞击正确答案加速</p>
+        <br>
+        <button id="start-btn">START MISSION</button>
+    </div>
+
+    <!-- 引入 Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
