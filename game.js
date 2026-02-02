@@ -228,44 +228,23 @@ function createPlayer() {
             model.rotation.y = Math.PI; // 通常模型是朝前的，我们这里可能需要转180度
             model.position.y = 0;
             
-            // 智能车轮识别系统 (位置+名称双重检测)
-            const box = new THREE.Box3().setFromObject(model);
-            const size = new THREE.Vector3();
-            box.getSize(size);
-            const center = new THREE.Vector3();
-            box.getCenter(center);
-            
-            // 车的底部高度 (大致)
-            const bottomY = box.min.y;
-            
+            // 材质增强：让车身反光
             model.traverse((o) => {
                 if (o.isMesh) {
+                    console.log("Model Part Found:", o.name); // 打印所有部件名称
+                    
                     o.castShadow = true;
                     o.receiveShadow = true;
                     o.material.envMapIntensity = 1;
 
-                    // 1. 名称检测 (Name Check)
+                    // 暴力匹配：只要不是车身 (Body/Chassis)，就假设是轮子？
+                    // 或者我们把所有名字都变成小写再匹配
                     const name = o.name.toLowerCase();
-                    let isWheelByName = name.includes('wheel') || name.includes('tire') || name.includes('rim') || name.includes('cylinder');
-                    
-                    // 2. 位置检测 (Position Check)
-                    // 轮子通常在车的四个角，且位置较低
-                    // 计算该部件的世界坐标 (相对于车身)
-                    // 注意：此时模型还没加到 scene，worldMatrix 可能不准，用 local position 估算
-                    // 但 GLTF 层级复杂，保险起见，我们主要依赖名称，
-                    // 如果名称失败，尝试判断 Mesh 的几何体边界是否在“轮子区域”
+                    let isWheelByName = name.includes('wheel') || name.includes('tire') || name.includes('rim') || name.includes('cylinder') || name.includes('disk');
                     
                     if (isWheelByName) {
                         o.userData.isWheel = true;
-                        
-                        // 尝试修正旋转中心：
-                        // 有些模型原点不在几何体中心，导致转动变成公转。
-                        // 如果需要，我们可以创建一个父级 Pivot 来修正，但这比较复杂。
-                        // 先假设原点是正确的 (通常车辆模型都会把轮子原点设在轴心)。
-                        
-                        // DEBUG: 暂时把识别到的轮子变成红色，确认是否识别成功
-                        // o.material = o.material.clone();
-                        // o.material.color.set(0xff0000); 
+                        console.log(">> Identified as Wheel:", o.name);
                     }
                 }
             });
