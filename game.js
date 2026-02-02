@@ -1,4 +1,4 @@
-// Geo Racer Game Logic (Three.js) - v0.2 Visual Upgrade
+// Geo Racer Game Logic (Three.js) - v0.3 Anti-Overlap & Smoother Spawning
 
 let scene, camera, renderer;
 let playerCar;
@@ -17,6 +17,7 @@ let isGameOver = false;
 let isGameRunning = false;
 let clock = new THREE.Clock();
 let frameCount = 0;
+let isGateScheduled = false; // 防止重复生成
 
 // 题库数据
 const questionBank = [
@@ -170,16 +171,20 @@ function createPlayer() {
     scene.add(playerCar);
 }
 
-function spawnGate(zPos) {
+function spawnGate() {
+    // 强制清除之前的障碍物，确保同一时间屏幕上只有一道题
+    
     currentQuestion = questionBank[Math.floor(Math.random() * questionBank.length)];
     document.getElementById('question-box').innerHTML = `<span style="color:#aaa;font-size:16px">MISSION OBJECTIVE:</span><br>${currentQuestion.q}`;
     document.getElementById('question-box').style.borderColor = "#0ff";
 
-    // 增加门之间的距离，给足反应时间
-    const gateZ = zPos;
+    // 固定生成在远处
+    const spawnZ = -400;
 
-    createGateMesh(-LANE_WIDTH/2, gateZ, currentQuestion.a, currentQuestion.correct === "A" ? "correct" : "wrong");
-    createGateMesh(LANE_WIDTH/2, gateZ, currentQuestion.b, currentQuestion.correct === "B" ? "correct" : "wrong");
+    createGateMesh(-LANE_WIDTH/2, spawnZ, currentQuestion.a, currentQuestion.correct === "A" ? "correct" : "wrong");
+    createGateMesh(LANE_WIDTH/2, spawnZ, currentQuestion.b, currentQuestion.correct === "B" ? "correct" : "wrong");
+    
+    isGateScheduled = false;
 }
 
 function createGateMesh(x, z, text, type) {
@@ -337,8 +342,10 @@ function animate() {
                 if(obj.userData.domElement) obj.userData.domElement.remove();
                 obstacles.splice(i, 1);
                 
-                if (obstacles.length === 0) {
-                     spawnGate(-300); // 每一关间隔更远，约 300 单位
+                // 修改点：必须等上一道门彻底消失，才生成下一道
+                if (obstacles.length === 0 && !isGateScheduled) {
+                     isGateScheduled = true;
+                     setTimeout(() => spawnGate(), 500);
                 }
             }
         }
@@ -380,7 +387,9 @@ function handleCollision(gate) {
         currentSpeed = boostSpeed;
         setTimeout(() => currentSpeed = maxSpeed, 1500);
         
-        setTimeout(() => spawnGate(-300), 1000); 
+        // 碰撞后不需要在这里生成下一关，统一由主循环里的 obstacles.length check 处理
+        // 但为了防止空档期太长，我们可以强制清除并重置 scheduled
+        // 实际上这里不需要做特殊处理，因为碰撞后 gate 被 remove，主循环会检测到 length 0
         
     } else {
         document.getElementById('question-box').innerHTML = "<span style='color:#f00;font-size:40px'>WRONG!</span>";
@@ -389,8 +398,6 @@ function handleCollision(gate) {
         
         currentSpeed = 0.2; 
         setTimeout(() => currentSpeed = maxSpeed, 1500);
-        
-        setTimeout(() => spawnGate(-300), 1000);
     }
 }
 
