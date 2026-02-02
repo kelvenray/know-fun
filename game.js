@@ -237,6 +237,15 @@ function createPlayer() {
                     o.receiveShadow = true;
                     o.material.envMapIntensity = 1;
 
+            // 收集需要修复的轮子，避免在 traverse 过程中修改场景图结构导致遍历中断
+            const wheelsToFix = [];
+
+            model.traverse((o) => {
+                if (o.isMesh) {
+                    o.castShadow = true;
+                    o.receiveShadow = true;
+                    o.material.envMapIntensity = 1;
+
                     // 2. 名称检测 (Name Check)
                     const name = o.name.toLowerCase();
                     let isWheelByName = name.includes('wheel') || name.includes('tire') || name.includes('tyre') || 
@@ -244,70 +253,65 @@ function createPlayer() {
                                         name.includes('brake') || name.includes('rotor');
                     
                     if (isWheelByName) {
-                        o.userData.isWheel = true;
-                        
-                        // --- 终极方案：Pivot Group Wrapper ---
-                        // 为了彻底解决“公转”和“轴向”混乱问题，我们不直接动 Mesh 的 geometry (因为可能有共享 geometry 问题)。
-                        // 我们创建一个新的 Group (Pivot)，把它放在 Mesh 的视觉中心。
-                        // 然后把 Mesh 塞进这个 Group 里。
-                        // 最后旋转这个 Group。
-                        
-                        // 1. 计算视觉中心 (世界坐标 -> 转为父级局部坐标)
-                        // 注意：此时 traverse 还没结束，world matrix 可能未更新。
-                        // 但 o.geometry 是可靠的。
-                        
-                        o.geometry.computeBoundingBox();
-                        const center = new THREE.Vector3();
-                        o.geometry.boundingBox.getCenter(center); 
-                        // center 是 Mesh 坐标系下的偏移量
-                        
-                        // 只有当偏移量显著时才需要 Wrapper，否则直接转 Mesh 即可
-                        // 但为了统一行为，我们对所有轮子都做这个操作
-                        
-                        const parent = o.parent;
-                        if (parent) {
-                            // 2. 创建 Pivot Group
-                            const pivot = new THREE.Group();
-                            
-                            // Pivot 的位置 = Mesh 的位置 + (旋转后的几何中心偏移)
-                            // 这一步非常 tricky，因为 Mesh 可能已经被旋转/缩放了
-                            
-                            const offset = center.clone();
-                            offset.applyQuaternion(o.quaternion);
-                            offset.multiply(o.scale);
-                            
-                            pivot.position.copy(o.position).add(offset);
-                            pivot.rotation.copy(o.rotation); // 继承旋转
-                            pivot.scale.copy(o.scale);       // 继承缩放
-                            
-                            // 3. 修正 Mesh 在 Pivot 里的位置 (反向偏移)
-                            // Mesh 现在是 Pivot 的子对象。
-                            // Pivot 在原 Mesh 的几何中心。
-                            // Mesh 应该相对于 Pivot 移动 -center
-                            
-                            // 这里的逻辑有点绕，简单做法：
-                            // 既然我们要让 Mesh 绕着 geometric center 转，
-                            // 那我们就在 geometric center 放个轴 (Pivot)。
-                            // Mesh 相对于这个轴的位置就是 -center。
-                            // 但是 Mesh 自身可能已经有旋转了，所以不能简单设 position。
-                            
-                            // 简化方案：
-                            // 不移动 Mesh，而是移动 Geometry。
-                            // 这是最稳的，但是如果 Geometry 被多个 Mesh 共享 (Instancing)，会全乱套。
-                            // 鉴于这是一个简单的 GLTF，通常轮子是独立的 Mesh，我们冒险修改 Geometry。
-                            
-                            o.geometry.translate(-center.x, -center.y, -center.z);
-                            
-                            // 补偿 Mesh 位置
-                            const worldOffset = center.clone().applyQuaternion(o.quaternion).multiply(o.scale);
-                            o.position.add(worldOffset);
-                            
-                            // 标记为旋转器
-                            o.userData.isWheelRotator = true;
-                            
-                            console.log(`>> Wheel Fixed (Geometry Translate): ${o.name}`);
-                        }
+                        wheelsToFix.push(o);
                     }
+                }
+            });
+
+            // 统一修复轮子 (Fix Logic)
+            wheelsToFix.forEach(o => {
+                o.userData.isWheel = true;
+                
+                // --- Clone Geometry ---
+                // 关键：防止多个轮子共享同一个几何体 (Instancing)。
+                // 如果不克隆，修改一个轮子的几何体原点会影响所有共享该几何体的轮子，导致它们位置错乱。
+                o.geometry = o.geometry.clone();
+
+                // --- Pivot Group Wrapper ---
+                // 1. 计算几何中心 (Geometric Center)
+                o.geometry.computeBoundingBox();
+                const center = new THREE.Vector3();
+                o.geometry.boundingBox.getCenter(center); 
+
+                const parent = o.parent;
+                if (parent) {
+                    // 2. 创建 Pivot Group
+                    const pivot = new THREE.Group();
+                    
+                    // 计算 Pivot 应该在的世界位置 (相对于父级)
+                    // Pivot Pos = Mesh Pos + (Rotated & Scaled Center Offset)
+                    const offset = center.clone();
+                    offset.applyQuaternion(o.quaternion);
+                    offset.multiply(o.scale);
+                    
+                    pivot.position.copy(o.position).add(offset);
+                    pivot.rotation.copy(o.rotation);
+                    pivot.scale.copy(o.scale);
+                    
+                    // 3. 将 Pivot 插入到层级中
+                    parent.add(pivot);
+                    pivot.add(o); // 将轮子 Mesh 移入 Pivot
+                    
+                    // 4. 归零 Mesh 的位置和旋转 (因为它现在是 Pivot 的子集)
+                    // Mesh 的新位置应该是相对于 Pivot 的反向偏移
+                    // 但最稳妥的方法是直接修改 Geometry 顶点，让 Mesh 归零。
+                    
+                    o.geometry.translate(-center.x, -center.y, -center.z);
+                    
+                    o.position.set(0, 0, 0);
+                    o.rotation.set(0, 0, 0);
+                    o.scale.set(1, 1, 1); // Scale 已经在 Pivot 上应用了
+                    
+                    // 标记 Pivot 为旋转目标，而不是 Mesh
+                    // 因为我们想转动的是 Pivot (轴心)
+                    pivot.userData.isWheelRotator = true;
+                    pivot.name = "Pivot_" + o.name;
+                    
+                    console.log(`>> Wheel Fixed & Cloned: ${o.name}`);
+                }
+            });
+            
+            playerCar.add(model);
                 }
             });
             
