@@ -71,7 +71,7 @@ function init() {
 
     // 事件监听
     document.addEventListener('keydown', onKeyDown);
-    document.addEventListener('keyup', onKeyUp); // 监听松开按键
+    document.addEventListener('keyup', onKeyUp); 
     window.addEventListener('resize', onWindowResize);
     document.getElementById('start-btn').addEventListener('click', startGame);
     
@@ -283,6 +283,12 @@ function updateLabels() {
             }
         }
     });
+}
+
+function onKeyUp(event) {
+    if (event.code === 'Space' || event.key === 'w' || event.key === 'ArrowUp') {
+        activateBoost(false);
+    }
 }
 
 function onKeyDown(event) {
