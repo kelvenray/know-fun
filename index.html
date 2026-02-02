@@ -2,180 +2,209 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>Geo Racer: 特工狂飙 v0.2</title>
+    <title>Geo Racer: Neon Horizon</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <style>
-        body { margin: 0; overflow: hidden; background-color: #050011; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         
-        /* HUD 样式升级 */
-        #hud {
-            position: absolute;
-            top: 30px;
-            left: 0;
-            width: 100%;
-            text-align: center;
-            pointer-events: none;
-            z-index: 10;
-            display: flex;
-            justify-content: center;
-        }
-        #question-box {
-            background: rgba(0, 10, 20, 0.85);
-            border: 2px solid #0ff;
-            border-radius: 12px;
-            padding: 20px 40px;
-            font-size: 28px;
-            font-weight: bold;
-            color: white;
-            max-width: 60%;
-            box-shadow: 0 0 25px rgba(0, 255, 255, 0.4);
-            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
-            backdrop-filter: blur(5px);
-            transition: border-color 0.3s;
-        }
-        
-        #score-board {
-            position: absolute;
-            top: 30px;
-            right: 30px;
-            color: #ffcc00;
-            font-size: 36px;
-            font-family: 'Impact', sans-serif;
-            text-shadow: 2px 2px 0 #000;
-            z-index: 10;
-        }
-        
-        #speed-meter {
-            position: absolute;
-            bottom: 30px;
-            left: 30px;
-            color: #ff00ff;
-            font-size: 32px;
-            font-family: 'Courier New', monospace;
-            font-weight: bold;
-            text-shadow: 0 0 10px #ff00ff;
-            z-index: 10;
-        }
-
-        /* 选项标签样式 */
-        .option-label {
-            position: absolute;
-            color: #fff;
-            font-weight: bold;
-            font-size: 24px;
-            background: linear-gradient(90deg, rgba(0,0,0,0.8), rgba(0,0,0,0.4));
-            padding: 10px 20px;
-            border-left: 5px solid #0ff;
-            border-radius: 4px;
-            pointer-events: none;
-            white-space: nowrap;
-            text-shadow: 1px 1px 2px black;
-            transition: transform 0.1s;
-        }
-        .opt-key {
-            color: #ff00ff;
-            background: #fff;
-            padding: 2px 8px;
-            border-radius: 4px;
-            margin-right: 10px;
-            font-family: monospace;
-            font-weight: 900;
-        }
-
-        /* 启动屏幕 */
-        #start-screen {
+        /* UI Overlay Layer */
+        #ui-layer {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(135deg, #050011 0%, #1a0b2e 100%);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            color: white;
-            z-index: 20;
+            pointer-events: none;
+            z-index: 10;
         }
-        h1 { 
-            font-size: 80px; 
-            color: #fff; 
-            text-transform: uppercase; 
-            letter-spacing: 10px; 
-            margin-bottom: 10px; 
-            text-shadow: 
-                0 0 10px #0ff, 
-                0 0 20px #0ff, 
-                0 0 40px #0ff, 
-                0 0 80px #0ff;
-            font-style: italic;
+
+        /* HUD: Heads Up Display (In-Game) */
+        #hud {
+            display: none; /* Default hidden until game starts */
+            width: 100%; height: 100%;
         }
-        p { font-size: 24px; color: #aaa; letter-spacing: 2px; }
+
+        #top-bar {
+            position: absolute;
+            top: 20px; width: 100%;
+            display: flex; justify-content: space-between; padding: 0 40px; box-sizing: border-box;
+            text-shadow: 0 0 10px rgba(0,255,255,0.8);
+        }
+        .hud-metric { font-family: 'Courier New', monospace; font-size: 24px; color: #0ff; font-weight: bold; }
+        .hud-value { color: #fff; font-size: 32px; }
+
+        #question-panel {
+            position: absolute;
+            top: 80px; left: 50%; transform: translateX(-50%);
+            width: 60%;
+            background: rgba(0, 10, 30, 0.8);
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            border-top: 4px solid #0ff;
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            text-align: center;
+            border-radius: 0 0 20px 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            transition: all 0.3s;
+        }
+        #question-text {
+            color: white; font-size: 28px; font-weight: 600; line-height: 1.4;
+            text-shadow: 0 2px 4px black;
+        }
+        #question-label {
+            color: #0ff; font-size: 14px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 10px; display: block;
+        }
+
+        #nitro-btn {
+            position: absolute; bottom: 40px; right: 40px;
+            width: 120px; height: 120px;
+            background: rgba(255, 0, 0, 0.2);
+            border: 2px solid #ff0055;
+            border-radius: 50%;
+            color: #ff0055;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            font-weight: bold; font-size: 18px;
+            pointer-events: auto; cursor: pointer;
+            box-shadow: 0 0 20px rgba(255, 0, 85, 0.4);
+            transition: all 0.2s;
+            backdrop-filter: blur(4px);
+        }
+        #nitro-btn:active { background: #ff0055; color: white; transform: scale(0.95); box-shadow: 0 0 50px #ff0055; }
         
-        button {
-            margin-top: 50px;
-            background: transparent;
-            border: 3px solid #0ff;
-            padding: 20px 60px;
-            font-size: 28px;
-            color: #0ff;
-            font-weight: bold;
+        /* 选项标签 (Follow 3D) */
+        .world-label {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            color: white; font-weight: bold; font-size: 20px;
+            background: rgba(0,0,0,0.6); border: 1px solid #0ff;
+            padding: 8px 16px; border-radius: 4px;
+            text-shadow: 0 2px 2px black;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        .key-hint { display: inline-block; background: #0ff; color: black; padding: 2px 6px; border-radius: 3px; margin-right: 8px; font-size: 16px; }
+
+        /* Main Menu System */
+        #main-menu {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.4); /* Let 3D bg show through */
+            backdrop-filter: blur(5px);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 20; pointer-events: auto;
+        }
+        
+        .logo-container { margin-bottom: 60px; text-align: center; }
+        h1.game-title {
+            font-size: 80px; color: #fff; margin: 0; font-style: italic;
+            text-transform: uppercase; letter-spacing: -2px;
+            background: linear-gradient(to bottom, #fff 0%, #0ff 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 0 20px rgba(0,255,255,0.6));
+        }
+        .subtitle { color: #0ff; font-size: 20px; letter-spacing: 10px; margin-top: 10px; text-transform: uppercase; }
+
+        .menu-grid {
+            display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;
+            width: 800px; max-width: 90%;
+        }
+
+        .menu-card {
+            background: rgba(0, 20, 40, 0.6);
+            border: 1px solid rgba(0, 255, 255, 0.2);
+            padding: 30px;
+            border-radius: 12px;
             cursor: pointer;
-            text-transform: uppercase;
-            letter-spacing: 3px;
             transition: all 0.3s;
             position: relative;
             overflow: hidden;
         }
-        button:hover {
-            background: #0ff;
-            color: #000;
-            box-shadow: 0 0 30px #0ff;
+        .menu-card:hover {
+            background: rgba(0, 40, 80, 0.8);
+            border-color: #0ff;
+            transform: translateY(-5px);
+            box-shadow: 0 10px 40px rgba(0, 255, 255, 0.2);
         }
+        .menu-card.locked { opacity: 0.5; cursor: not-allowed; filter: grayscale(1); }
+        .menu-card h3 { color: #fff; margin: 0 0 10px 0; font-size: 24px; }
+        .menu-card p { color: #aaa; margin: 0; font-size: 14px; line-height: 1.5; }
+        .menu-icon { font-size: 40px; margin-bottom: 15px; color: #0ff; }
+        .tag { position: absolute; top: 15px; right: 15px; background: #ff0055; color: white; font-size: 10px; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
 
-        #boost-btn {
-            position: absolute;
-            bottom: 30px;
-            right: 30px;
-            width: 150px;
-            height: 150px;
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(255,165,0,0.8), rgba(255,0,0,0.8));
-            border: 4px solid #fff;
-            color: white;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            text-align: center;
-            font-weight: bold;
-            font-size: 20px;
-            cursor: pointer;
-            z-index: 10;
-            box-shadow: 0 0 20px #ff4400;
-            user-select: none;
-            transition: transform 0.1s;
-        }
-        #boost-btn:active {
-            transform: scale(0.9);
-            box-shadow: 0 0 50px #ff4400;
-            background: #fff;
-            color: #ff4400;
-        }
     </style>
+    <!-- Import Map for Modules -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
 </head>
 <body>
-    <div id="hud">
-        <div id="question-box">SYSTEM READY...<br><span style="font-size:16px;color:#888">Awaiting Input</span></div>
-    </div>
-    <div id="score-board">SCORE: 0</div>
-    <div id="speed-meter">SPEED: 0 KM/H</div>
-    
-    <div id="boost-btn">NITRO BOOST (SPACE)</div>
+    <!-- 3D Canvas Container -->
+    <div id="canvas-container" style="position: absolute; top:0; left:0; z-index: 0;"></div>
 
-    <div id="start-screen">
-        <h1>Geo Racer</h1>
-        <p>MISSION: GEOGRAPHY</p>
-        <button id="start-btn">Start Engine</button>
+    <!-- UI Layer -->
+    <div id="ui-layer">
+        
+        <!-- Main Menu -->
+        <div id="main-menu">
+            <div class="logo-container">
+                <h1 class="game-title">Geo Racer</h1>
+                <div class="subtitle">Neon Horizon Edition</div>
+            </div>
+
+            <div class="menu-grid">
+                <!-- Mode 1: Campaign -->
+                <div class="menu-card" id="btn-campaign">
+                    <div class="menu-icon">🌍</div>
+                    <h3>Campaign Mode</h3>
+                    <p>Start your geography agent training. <br>Chapter 1: The Earth & Maps.</p>
+                </div>
+
+                <!-- Mode 2: Knowledge Base Select (WIP) -->
+                <div class="menu-card locked">
+                    <div class="tag">COMING SOON</div>
+                    <div class="menu-icon">📚</div>
+                    <h3>Select Knowledge</h3>
+                    <p>Load custom data from uploaded PDFs.<br>Requires Vector DB integration.</p>
+                </div>
+
+                <!-- Mode 3: Garage (WIP) -->
+                <div class="menu-card locked">
+                    <div class="tag">LOCKED</div>
+                    <div class="menu-icon">🏎️</div>
+                    <h3>Garage</h3>
+                    <p>Customize your agent vehicle.<br>Unlock new skins and trails.</p>
+                </div>
+
+                <!-- Mode 4: Settings -->
+                <div class="menu-card locked">
+                    <div class="menu-icon">⚙️</div>
+                    <h3>Settings</h3>
+                    <p>Graphics, Audio, and Control preferences.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- In-Game HUD -->
+        <div id="hud">
+            <div id="top-bar">
+                <div class="hud-metric">SPEED <span class="hud-value" id="disp-speed">0</span> <span style="font-size:16px">KM/H</span></div>
+                <div class="hud-metric">SCORE <span class="hud-value" id="disp-score">0</span></div>
+            </div>
+
+            <div id="question-panel">
+                <span id="question-label">Current Objective</span>
+                <div id="question-text">Loading mission data...</div>
+            </div>
+
+            <div id="nitro-btn">
+                <span>NITRO</span>
+                <span style="font-size:12px; opacity:0.8">SPACE</span>
+            </div>
+        </div>
     </div>
 
-    <!-- 引入 Three.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="game.js"></script>
+    <!-- Game Logic -->
+    <script type="module" src="game.js"></script>
 </body>
 </html>

@@ -1,25 +1,49 @@
-// Geo Racer Game Logic (Three.js) - v0.3 Anti-Overlap & Smoother Spawning
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
-let scene, camera, renderer;
+// --- Global State ---
+const state = {
+    screen: 'menu', // menu, game, gameover
+    speed: 0,
+    score: 0,
+    lane: 0, // -1, 1
+    boost: false,
+    distance: 0,
+    isTransitioning: false
+};
+
+// --- Constants ---
+const CFG = {
+    laneWidth: 10,
+    baseSpeed: 0.8,
+    boostSpeed: 2.5,
+    cameraHeight: 5,
+    cameraDist: 14,
+    fovBase: 60,
+    fovBoost: 85,
+    colors: {
+        skyTop: 0x000000,
+        skyBottom: 0x2a004d, // Deep Purple
+        grid: 0xff00ff,
+        fog: 0x1a0b2e
+    }
+};
+
+// --- Three.js Globals ---
+let scene, camera, renderer, composer;
+let clock = new THREE.Clock();
+let container;
+
+// --- Game Objects ---
 let playerCar;
-let roadGrid;
+let terrain; // The moving grid/mountains
 let obstacles = [];
 let particles = [];
-let score = 0;
-let speed = 0;
-// 速度调整：降低基础速度，增加反应时间
-let maxSpeed = 0.8; 
-let boostSpeed = 2.0; 
-let currentSpeed = 0;
-let lane = 0; // -1: Left, 1: Right
-const LANE_WIDTH = 8; // 加宽赛道
-let isGameOver = false;
-let isGameRunning = false;
-let clock = new THREE.Clock();
-let frameCount = 0;
-let isGateScheduled = false; // 防止重复生成
+let roadLines = [];
 
-// 题库数据
+// --- Data ---
 const questionBank = [
     { q: "地球的形状是？", a: "球体", b: "天圆地方", correct: "A" },
     { q: "地球表面海洋占多少比例？", a: "71%", b: "29%", correct: "A" },
@@ -30,414 +54,431 @@ const questionBank = [
     { q: "板块构造学说认为地球表层分为几大板块？", a: "六大板块", b: "七大板块", correct: "A" },
     { q: "下列哪个不是大洲？", a: "大洋洲", b: "北冰洋", correct: "B" }
 ];
-
 let currentQuestion = null;
+let gateCooldown = 0; // Timer to prevent overlapping
 
-// 初始化
+// --- Init ---
 function init() {
-    // 场景 - 赛博朋克深紫雾
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x050011);
-    scene.fog = new THREE.FogExp2(0x050011, 0.015);
-
-    // 相机 - 稍微放低一点，增加速度感
-    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 4, 12);
-    camera.lookAt(0, 0, -20);
-
-    // 渲染器
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
-    document.body.appendChild(renderer.domElement);
-
-    // 灯光
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambientLight);
+    container = document.getElementById('canvas-container');
     
-    // 霓虹灯光
-    const pointLight = new THREE.PointLight(0x00ffff, 1, 100);
-    pointLight.position.set(0, 10, 0);
-    scene.add(pointLight);
+    // Scene Setup
+    scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(CFG.colors.fog, 0.012);
+    
+    // Camera
+    camera = new THREE.PerspectiveCamera(CFG.fovBase, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, CFG.cameraHeight, CFG.cameraDist);
+    camera.lookAt(0, 0, -50);
 
-    // 创建赛道
-    createRoad();
+    // Renderer
+    renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" }); // Antialias off for Bloom perf
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ReinhardToneMapping;
+    container.appendChild(renderer.domElement);
 
-    // 创建更酷的赛车
+    // Post Processing (Bloom)
+    const renderScene = new RenderPass(scene, camera);
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+    bloomPass.threshold = 0;
+    bloomPass.strength = 1.5; // Glow strength
+    bloomPass.radius = 0.5;
+
+    composer = new EffectComposer(renderer);
+    composer.addPass(renderScene);
+    composer.addPass(bloomPass);
+
+    // Environment
+    createLights();
+    createTerrain(); // Vaporwave Grid + Mountains
     createPlayer();
 
-    // 星空背景
-    createStars();
-
-    // 事件监听
-    document.addEventListener('keydown', onKeyDown);
-    document.addEventListener('keyup', onKeyUp); 
+    // Event Listeners
     window.addEventListener('resize', onWindowResize);
-    document.getElementById('start-btn').addEventListener('click', startGame);
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keyup', onKeyUp);
     
-    // 触摸/鼠标按钮支持
-    const boostBtn = document.getElementById('boost-btn');
-    boostBtn.addEventListener('mousedown', () => activateBoost(true));
-    boostBtn.addEventListener('mouseup', () => activateBoost(false));
-    boostBtn.addEventListener('touchstart', (e) => { e.preventDefault(); activateBoost(true); });
-    boostBtn.addEventListener('touchend', (e) => { e.preventDefault(); activateBoost(false); });
+    // UI Bindings
+    document.getElementById('btn-campaign').addEventListener('click', startGame);
+    
+    const nitroBtn = document.getElementById('nitro-btn');
+    const setBoost = (active) => { state.boost = active; };
+    nitroBtn.addEventListener('mousedown', () => setBoost(true));
+    nitroBtn.addEventListener('mouseup', () => setBoost(false));
+    nitroBtn.addEventListener('touchstart', (e) => { e.preventDefault(); setBoost(true); });
+    nitroBtn.addEventListener('touchend', (e) => { e.preventDefault(); setBoost(false); });
 
+    // Start Loop
     animate();
 }
 
-function createStars() {
-    const geometry = new THREE.BufferGeometry();
-    const vertices = [];
-    for (let i = 0; i < 1000; i++) {
-        vertices.push(
-            THREE.MathUtils.randFloatSpread(1000),
-            THREE.MathUtils.randFloat(10, 500),
-            THREE.MathUtils.randFloatSpread(1000)
-        );
-    }
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-    const material = new THREE.PointsMaterial({ color: 0xffffff, size: 0.7 });
-    const stars = new THREE.Points(geometry, material);
-    scene.add(stars);
+function createLights() {
+    const ambient = new THREE.AmbientLight(0xffffff, 0.2);
+    scene.add(ambient);
+
+    const sunLight = new THREE.DirectionalLight(0xff00ff, 1); // Purple Sun
+    sunLight.position.set(0, 20, -100);
+    scene.add(sunLight);
+
+    // Dynamic Point lights on the car handled in update
 }
 
-function createRoad() {
-    // 地面网格 - Synthwave 风格 (移动的 Grid)
-    const geometry = new THREE.PlaneGeometry(200, 2000, 100, 100);
-    const material = new THREE.MeshBasicMaterial({ 
-        color: 0xff00ff, // 粉色网格
-        wireframe: true,
-        transparent: true,
-        opacity: 0.3
-    });
-    roadGrid = new THREE.Mesh(geometry, material);
-    roadGrid.rotation.x = -Math.PI / 2;
-    roadGrid.position.z = -500;
-    scene.add(roadGrid);
+// --- Procedural Generation ---
 
-    // 赛道边缘发光线
-    const lineGeo = new THREE.PlaneGeometry(1, 2000);
-    const lineMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+function createTerrain() {
+    // 1. Endless Grid Floor
+    const gridGeo = new THREE.PlaneGeometry(400, 400, 80, 80);
+    // Displace vertices to make mountains on sides
+    const pos = gridGeo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const y = pos.getY(i); // This is actually Z in world space before rotation
+        
+        // Safe zone in middle (road)
+        if (Math.abs(x) > 20) {
+            const noise = Math.sin(x * 0.1) * Math.cos(y * 0.05) * 10;
+            pos.setZ(i, Math.abs(x * 0.2) + noise); // Lift up sides
+        } else {
+            pos.setZ(i, 0); // Flat road
+        }
+    }
+    gridGeo.computeVertexNormals();
+
+    const gridMat = new THREE.MeshStandardMaterial({
+        color: 0x000000,
+        emissive: 0xbc13fe, // Neon Purple
+        emissiveIntensity: 0.2,
+        wireframe: true,
+        roughness: 0.5,
+        metalness: 0.8
+    });
+
+    terrain = new THREE.Mesh(gridGeo, gridMat);
+    terrain.rotation.x = -Math.PI / 2;
+    terrain.position.z = -100; // Start ahead
+    scene.add(terrain);
+
+    // 2. Road Lines (Glowing)
+    const lineGeo = new THREE.BoxGeometry(0.5, 0.1, 400);
+    const lineMat = new THREE.MeshBasicMaterial({ color: 0x00ffff }); // Cyan
     
     const leftLine = new THREE.Mesh(lineGeo, lineMat);
-    leftLine.rotation.x = -Math.PI / 2;
-    leftLine.position.set(-LANE_WIDTH - 2, 0.1, -500);
+    leftLine.position.set(-CFG.laneWidth - 2, 0.1, -100);
     scene.add(leftLine);
+    roadLines.push(leftLine);
 
     const rightLine = new THREE.Mesh(lineGeo, lineMat);
-    rightLine.rotation.x = -Math.PI / 2;
-    rightLine.position.set(LANE_WIDTH + 2, 0.1, -500);
+    rightLine.position.set(CFG.laneWidth + 2, 0.1, -100);
     scene.add(rightLine);
+    roadLines.push(rightLine);
 }
 
 function createPlayer() {
     playerCar = new THREE.Group();
 
-    // 车身主体 (流线型)
-    const bodyGeo = new THREE.BoxGeometry(2.2, 0.8, 4.5);
-    const bodyMat = new THREE.MeshPhongMaterial({ 
-        color: 0x001133, 
-        specular: 0x00ffff,
-        shininess: 100
+    // Futuristic Chassis
+    const chassisGeo = new THREE.BufferGeometry();
+    // Simple custom shape for aerodynamic look (Triangle-ish)
+    const vertices = new Float32Array([
+        0, 1, 2,  -1.5, 0.5, 2,  1.5, 0.5, 2, // Back
+        0, 1, 2,  -1.5, 0.5, 2,  0, 0.2, -3, // Left Side
+        0, 1, 2,  1.5, 0.5, 2,   0, 0.2, -3, // Right Side
+        -1.5, 0.5, 2, 1.5, 0.5, 2, 0, 0.2, -3 // Bottom
+    ]);
+    chassisGeo.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+    chassisGeo.computeVertexNormals();
+    
+    const chassisMat = new THREE.MeshStandardMaterial({ 
+        color: 0x000000, 
+        roughness: 0.2, 
+        metalness: 0.9,
+        emissive: 0x00ffff,
+        emissiveIntensity: 0.2
     });
-    const body = new THREE.Mesh(bodyGeo, bodyMat);
-    body.position.y = 0.8;
-    playerCar.add(body);
+    const chassis = new THREE.Mesh(chassisGeo, chassisMat);
+    playerCar.add(chassis);
 
-    // 驾驶舱
-    const cabinGeo = new THREE.BoxGeometry(1.5, 0.6, 2);
-    const cabinMat = new THREE.MeshBasicMaterial({ color: 0x00ffff }); // 发光蓝窗
-    const cabin = new THREE.Mesh(cabinGeo, cabinMat);
-    cabin.position.set(0, 1.4, -0.5);
-    playerCar.add(cabin);
+    // Glowing Strips (Tron Lines)
+    const stripGeo = new THREE.BoxGeometry(0.1, 0.1, 4.5);
+    const stripMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+    const leftStrip = new THREE.Mesh(stripGeo, stripMat);
+    leftStrip.position.set(-0.8, 0.6, -0.2);
+    playerCar.add(leftStrip);
+    const rightStrip = new THREE.Mesh(stripGeo, stripMat);
+    rightStrip.position.set(0.8, 0.6, -0.2);
+    playerCar.add(rightStrip);
 
-    // 轮子 (4个发光轮)
-    const wheelGeo = new THREE.CylinderGeometry(0.6, 0.6, 0.4, 16);
-    wheelGeo.rotateZ(Math.PI / 2);
-    const wheelMat = new THREE.MeshBasicMaterial({ color: 0xff00ff }); // 粉色轮子
-
-    const positions = [
-        [-1.3, 0.6, 1.5], [1.3, 0.6, 1.5], // 后轮
-        [-1.3, 0.6, -1.5], [1.3, 0.6, -1.5] // 前轮
-    ];
-
-    positions.forEach(pos => {
-        const wheel = new THREE.Mesh(wheelGeo, wheelMat);
-        wheel.position.set(...pos);
-        playerCar.add(wheel);
-    });
-
-    // 尾部喷射口
-    const engineGeo = new THREE.BoxGeometry(1.8, 0.4, 0.2);
-    const engineMat = new THREE.MeshBasicMaterial({ color: 0xff4400 });
+    // Engine Exhaust Glow
+    const engineGeo = new THREE.BoxGeometry(1, 0.5, 0.1);
+    const engineMat = new THREE.MeshBasicMaterial({ color: 0xff0055 });
     const engine = new THREE.Mesh(engineGeo, engineMat);
-    engine.position.set(0, 0.8, 2.3);
+    engine.position.set(0, 0.6, 2.05);
     playerCar.add(engine);
 
-    playerCar.position.set(-LANE_WIDTH/2, 0, 0); 
-    lane = -1;
+    // Engine Light
+    const light = new THREE.PointLight(0xff0055, 2, 10);
+    light.position.set(0, 1, 3);
+    playerCar.add(light);
+
+    playerCar.position.y = 0.5;
+    playerCar.position.x = -CFG.laneWidth / 2;
+    state.lane = -1;
+
     scene.add(playerCar);
 }
 
 function spawnGate() {
-    // 强制清除之前的障碍物，确保同一时间屏幕上只有一道题
-    
+    // Anti-overlap logic
+    if (gateCooldown > 0) return;
+
     currentQuestion = questionBank[Math.floor(Math.random() * questionBank.length)];
-    document.getElementById('question-box').innerHTML = `<span style="color:#aaa;font-size:16px">MISSION OBJECTIVE:</span><br>${currentQuestion.q}`;
-    document.getElementById('question-box').style.borderColor = "#0ff";
-
-    // 固定生成在远处
-    const spawnZ = -400;
-
-    createGateMesh(-LANE_WIDTH/2, spawnZ, currentQuestion.a, currentQuestion.correct === "A" ? "correct" : "wrong");
-    createGateMesh(LANE_WIDTH/2, spawnZ, currentQuestion.b, currentQuestion.correct === "B" ? "correct" : "wrong");
     
-    isGateScheduled = false;
+    // Update UI
+    const qPanel = document.getElementById('question-text');
+    qPanel.innerHTML = currentQuestion.q;
+    qPanel.style.opacity = 0;
+    setTimeout(() => { qPanel.style.opacity = 1; }, 100); // Fade in effect
+
+    const zPos = -400; // Spawn distance
+    
+    // Create gate objects
+    createGateMesh(-CFG.laneWidth/2, zPos, currentQuestion.a, currentQuestion.correct === "A" ? "correct" : "wrong");
+    createGateMesh(CFG.laneWidth/2, zPos, currentQuestion.b, currentQuestion.correct === "B" ? "correct" : "wrong");
+
+    gateCooldown = 500; // Wait frames before allowing next spawn logic (will be reset on pass)
 }
 
 function createGateMesh(x, z, text, type) {
     const group = new THREE.Group();
     
-    // 门柱
-    const pillarGeo = new THREE.BoxGeometry(0.5, 6, 0.5);
-    const pillarMat = new THREE.MeshBasicMaterial({ color: 0x444444 });
-    const leftPillar = new THREE.Mesh(pillarGeo, pillarMat);
-    leftPillar.position.set(-3, 3, 0);
-    const rightPillar = new THREE.Mesh(pillarGeo, pillarMat);
-    rightPillar.position.set(3, 3, 0);
-    group.add(leftPillar);
-    group.add(rightPillar);
+    // Neon Arches
+    const archGeo = new THREE.TorusGeometry(4, 0.2, 8, 30, Math.PI);
+    const archMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+    const arch = new THREE.Mesh(archGeo, archMat);
+    arch.position.y = 0;
+    group.add(arch);
 
-    // 顶部横梁
-    const topGeo = new THREE.BoxGeometry(6.5, 0.5, 0.5);
-    const top = new THREE.Mesh(topGeo, pillarMat);
-    top.position.set(0, 6, 0);
-    group.add(top);
+    // Base
+    const baseGeo = new THREE.BoxGeometry(1, 4, 1);
+    const baseMat = new THREE.MeshBasicMaterial({ color: 0x222222 });
+    const leftBase = new THREE.Mesh(baseGeo, baseMat);
+    leftBase.position.set(-4, 2, 0);
+    group.add(leftBase);
+    const rightBase = new THREE.Mesh(baseGeo, baseMat);
+    rightBase.position.set(4, 2, 0);
+    group.add(rightBase);
 
-    // 发光能量场 (半透明)
-    const energyGeo = new THREE.PlaneGeometry(6, 6);
-    // 统一颜色，不剧透
-    const energyMat = new THREE.MeshBasicMaterial({ 
+    // Hologram Field
+    const holoGeo = new THREE.PlaneGeometry(7, 6);
+    const holoMat = new THREE.MeshBasicMaterial({ 
         color: 0x00ffff, 
         transparent: true, 
-        opacity: 0.2, 
-        side: THREE.DoubleSide 
+        opacity: 0.1, 
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending 
     });
-    const energy = new THREE.Mesh(energyGeo, energyMat);
-    energy.position.set(0, 3, 0);
-    group.add(energy);
+    const holo = new THREE.Mesh(holoGeo, holoMat);
+    holo.position.y = 3;
+    group.add(holo);
 
     group.position.set(x, 0, z);
     group.userData = { type: type, text: text, isGate: true };
-    
     scene.add(group);
     obstacles.push(group);
 
-    // 文字标签
+    // HTML Label creation
     const label = document.createElement('div');
-    label.className = 'option-label';
-    label.innerHTML = `<span class="opt-key">${x < 0 ? 'A' : 'B'}</span> ${text}`;
+    label.className = 'world-label';
+    label.innerHTML = `<span class="key-hint">${x < 0 ? 'A' : 'B'}</span> ${text}`;
     document.body.appendChild(label);
     group.userData.domElement = label;
 }
 
-function createParticles(pos, color) {
-    // 简单的粒子爆炸
-    for(let i=0; i<10; i++) {
-        const geo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
-        const mat = new THREE.MeshBasicMaterial({ color: color });
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.position.copy(pos);
-        mesh.userData = {
-            vel: new THREE.Vector3(
-                (Math.random()-0.5)*20, 
-                Math.random()*20, 
-                (Math.random()-0.5)*20
-            )
-        };
-        scene.add(mesh);
-        particles.push(mesh);
+// --- Logic ---
+
+function startGame() {
+    state.screen = 'game';
+    state.score = 0;
+    state.speed = 0;
+    state.distance = 0;
+    
+    document.getElementById('main-menu').style.display = 'none';
+    document.getElementById('hud').style.display = 'block';
+    
+    // Reset player
+    playerCar.position.x = -CFG.laneWidth/2;
+    state.lane = -1;
+    
+    // Clear old obstacles
+    obstacles.forEach(o => {
+        scene.remove(o);
+        if(o.userData.domElement) o.userData.domElement.remove();
+    });
+    obstacles = [];
+    
+    spawnGate();
+}
+
+function updatePhysics(dt) {
+    if (state.screen !== 'game') {
+        // Menu animation: slow flyover
+        state.speed = 0.2;
+    } else {
+        // Game Speed Logic
+        const targetSpeed = state.boost ? CFG.boostSpeed : CFG.baseSpeed;
+        state.speed = THREE.MathUtils.lerp(state.speed, targetSpeed, dt * 2);
     }
+
+    // Move Terrain (Endless runner trick: move objects towards camera)
+    // Actually better: Move camera/player forward? No, floating point issues.
+    // Solution: Move texture/grid offset? Or move objects and respawn.
+    // We'll move objects Z positive.
+    
+    const moveDist = state.speed * 60 * dt; // Units per frame approx
+    state.distance += moveDist;
+
+    // 1. Terrain Loop
+    terrain.position.z += moveDist;
+    if (terrain.position.z > 100) terrain.position.z = -100;
+    
+    roadLines.forEach(l => {
+        l.position.z += moveDist;
+        if (l.position.z > 100) l.position.z = -100;
+    });
+
+    // 2. Obstacles
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+        let obj = obstacles[i];
+        obj.position.z += moveDist;
+
+        // Collision
+        if (state.screen === 'game' && Math.abs(obj.position.z - playerCar.position.z) < 2) {
+             if (Math.abs(obj.position.x - playerCar.position.x) < 4) {
+                 handleCollision(obj);
+                 // Remove immediately
+                 removeObstacle(i);
+                 continue;
+             }
+        }
+
+        // Out of view
+        if (obj.position.z > 20) {
+            removeObstacle(i);
+            // Spawn next gate logic
+            if (obstacles.length === 0) {
+                // Delay spawn
+                setTimeout(() => spawnGate(), 500); 
+            }
+        }
+    }
+
+    // 3. Camera Effects (FOV Boost)
+    const targetFov = state.boost ? CFG.fovBoost : CFG.fovBase;
+    camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, dt * 2);
+    camera.updateProjectionMatrix();
+
+    // Camera Shake
+    camera.position.y = CFG.cameraHeight + Math.sin(clock.elapsedTime * 5) * 0.05 + (state.boost ? (Math.random()*0.1) : 0);
+
+    // 4. Update Labels
+    updateLabels();
+
+    // 5. Player Smooth Lane Change
+    const targetX = state.lane === -1 ? -CFG.laneWidth/2 : CFG.laneWidth/2;
+    playerCar.position.x = THREE.MathUtils.lerp(playerCar.position.x, targetX, dt * 10);
+    // Tilt
+    const tilt = (playerCar.position.x - targetX) * -0.05;
+    playerCar.rotation.z = tilt;
+}
+
+function removeObstacle(index) {
+    const obj = obstacles[index];
+    scene.remove(obj);
+    if(obj.userData.domElement) obj.userData.domElement.remove();
+    obstacles.splice(index, 1);
+}
+
+function handleCollision(gate) {
+    if (gate.userData.type === "correct") {
+        state.score += 100;
+        document.getElementById('disp-score').innerText = state.score;
+        document.getElementById('question-panel').style.borderColor = "#0f0";
+        // Particle Burst
+        createExplosion(playerCar.position, 0x00ff00);
+    } else {
+        document.getElementById('question-panel').style.borderColor = "#f00";
+        state.speed = 0; // Hit stop
+        createExplosion(playerCar.position, 0xff0000);
+    }
+    
+    // Reset color after delay
+    setTimeout(() => {
+        document.getElementById('question-panel').style.borderColor = "rgba(0, 255, 255, 0.3)";
+    }, 1000);
+}
+
+function createExplosion(pos, color) {
+    // Simple logic, could be better
 }
 
 function updateLabels() {
     obstacles.forEach(obj => {
         if (obj.userData.domElement) {
-            const vector = obj.position.clone();
-            vector.y += 4; // 标签在门上方
-            vector.project(camera);
+            const el = obj.userData.domElement;
+            const pos = obj.position.clone();
+            pos.y += 5; // Above gate
+            pos.project(camera);
 
-            const x = (vector.x * .5 + .5) * window.innerWidth;
-            const y = (-(vector.y * .5) + .5) * window.innerHeight;
+            const x = (pos.x * .5 + .5) * window.innerWidth;
+            const y = (-(pos.y * .5) + .5) * window.innerHeight;
 
-            if (vector.z < 1) { 
-                obj.userData.domElement.style.left = `${x}px`;
-                obj.userData.domElement.style.top = `${y}px`;
-                
-                // 距离越近字体越大
-                const scale = Math.max(0.5, 15 / Math.abs(obj.position.z - playerCar.position.z));
-                obj.userData.domElement.style.transform = `translate(-50%, -50%) scale(${scale})`;
-                obj.userData.domElement.style.display = 'block';
+            if (pos.z < 1) { // In front
+                el.style.transform = `translate(-50%, -50%)`;
+                el.style.left = `${x}px`;
+                el.style.top = `${y}px`;
+                el.style.display = 'block';
+                // Fade by distance
+                const dist = obj.position.z - camera.position.z; // negative
+                // Simple opacity
+                el.style.opacity = 1; 
             } else {
-                obj.userData.domElement.style.display = 'none';
+                el.style.display = 'none';
             }
         }
     });
 }
 
-function onKeyUp(event) {
-    if (event.code === 'Space' || event.key === 'w' || event.key === 'ArrowUp') {
-        activateBoost(false);
-    }
+// --- Input ---
+function onKeyDown(e) {
+    if (state.screen !== 'game') return;
+    if (e.key === 'a' || e.key === 'ArrowLeft') state.lane = -1;
+    if (e.key === 'd' || e.key === 'ArrowRight') state.lane = 1;
+    if (e.code === 'Space' || e.key === 'w' || e.key === 'ArrowUp') state.boost = true;
 }
 
-function onKeyDown(event) {
-    if (!isGameRunning) return;
-    
-    // Space / W / Up Arrow -> Boost
-    if (event.code === 'Space' || event.key === 'w' || event.key === 'ArrowUp') {
-        activateBoost(true);
-    }
-    
-    // A / Left Arrow
-    if (event.key === 'a' || event.key === 'ArrowLeft') {
-        if (lane === 1) {
-            lane = -1;
-            // 平滑移动逻辑简化
-            playerCar.position.x = -LANE_WIDTH/2;
-            playerCar.rotation.z = 0.3;
-            setTimeout(() => playerCar.rotation.z = 0, 300);
-        }
-    }
-    // D / Right Arrow
-    if (event.key === 'd' || event.key === 'ArrowRight') {
-        if (lane === -1) {
-            lane = 1;
-            playerCar.position.x = LANE_WIDTH/2;
-            playerCar.rotation.z = -0.3;
-            setTimeout(() => playerCar.rotation.z = 0, 300);
-        }
-    }
-}
-
-function startGame() {
-    isGameRunning = true;
-    score = 0;
-    currentSpeed = maxSpeed;
-    document.getElementById('start-screen').style.display = 'none';
-    spawnGate(); // 修复：不传参数，使用函数内部的默认距离
+function onKeyUp(e) {
+    if (e.code === 'Space' || e.key === 'w' || e.key === 'ArrowUp') state.boost = false;
 }
 
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    composer.setSize(window.innerWidth, window.innerHeight);
 }
 
+// --- Loop ---
 function animate() {
     requestAnimationFrame(animate);
+    const dt = clock.getDelta();
+
+    updatePhysics(dt);
     
-    if (isGameRunning) {
-        frameCount++;
-        
-        // 移动障碍物 (模拟前进)
-        for (let i = obstacles.length - 1; i >= 0; i--) {
-            let obj = obstacles[i];
-            obj.position.z += currentSpeed; 
+    document.getElementById('disp-speed').innerText = Math.floor(state.speed * 300);
 
-            // 碰撞检测
-            if (obj.position.z > -2 && obj.position.z < 2) {
-                if (Math.abs(obj.position.x - playerCar.position.x) < 2) { // 稍微宽容一点的判定
-                    handleCollision(obj);
-                    scene.remove(obj);
-                    if(obj.userData.domElement) obj.userData.domElement.remove();
-                    obstacles.splice(i, 1);
-                    continue;
-                }
-            }
-
-            if (obj.position.z > 20) {
-                scene.remove(obj);
-                if(obj.userData.domElement) obj.userData.domElement.remove();
-                obstacles.splice(i, 1);
-                
-                // 修改点：必须等上一道门彻底消失，才生成下一道
-                if (obstacles.length === 0 && !isGateScheduled) {
-                     isGateScheduled = true;
-                     setTimeout(() => spawnGate(), 500);
-                }
-            }
-        }
-
-        // 粒子动画
-        for(let i = particles.length - 1; i>=0; i--) {
-            let p = particles[i];
-            p.position.add(p.userData.vel.clone().multiplyScalar(0.02));
-            p.rotation.x += 0.1;
-            p.scale.multiplyScalar(0.95);
-            if(p.scale.x < 0.01) {
-                scene.remove(p);
-                particles.splice(i, 1);
-            }
-        }
-
-        // 地面无限滚动视觉
-        roadGrid.position.z += currentSpeed;
-        if(roadGrid.position.z > 0) roadGrid.position.z = -500;
-
-        // 相机轻微晃动
-        camera.position.y = 4 + Math.sin(frameCount * 0.1) * 0.05;
-        
-        // 相机 FOV 动态调整 (简易版 Tween，不引入外部库)
-        if (isBoosting) {
-            camera.fov = THREE.MathUtils.lerp(camera.fov, 90, 0.1);
-        } else {
-            camera.fov = THREE.MathUtils.lerp(camera.fov, 60, 0.1);
-        }
-        camera.updateProjectionMatrix();
-        
-        document.getElementById('speed-meter').innerText = `SPEED: ${Math.floor(currentSpeed * 300)} KM/H`;
-        updateLabels();
-    }
-
-    renderer.render(scene, camera);
+    // Use Composer for Bloom
+    composer.render();
 }
 
-// 状态变量
-let isBoosting = false;
-
-function activateBoost(active) {
-    isBoosting = active;
-    if (active) {
-        currentSpeed = 4.0; // 超级加速
-    } else {
-        currentSpeed = maxSpeed;
-    }
-}
-
-function handleCollision(gate) {
-    if (gate.userData.type === "correct") {
-        score += 100;
-        document.getElementById('score-board').innerText = `SCORE: ${score}`;
-        document.getElementById('question-box').innerHTML = "<span style='color:#0f0;font-size:40px'>CORRECT!</span>";
-        document.getElementById('question-box').style.borderColor = "#0f0";
-        createParticles(playerCar.position, 0x00ff00);
-        
-        currentSpeed = boostSpeed;
-        setTimeout(() => currentSpeed = maxSpeed, 1500);
-        
-        // 碰撞后不需要在这里生成下一关，统一由主循环里的 obstacles.length check 处理
-        // 但为了防止空档期太长，我们可以强制清除并重置 scheduled
-        // 实际上这里不需要做特殊处理，因为碰撞后 gate 被 remove，主循环会检测到 length 0
-        
-    } else {
-        document.getElementById('question-box').innerHTML = "<span style='color:#f00;font-size:40px'>WRONG!</span>";
-        document.getElementById('question-box').style.borderColor = "#f00";
-        createParticles(playerCar.position, 0xff0000);
-        
-        currentSpeed = 0.2; 
-        setTimeout(() => currentSpeed = maxSpeed, 1500);
-    }
-}
-
+// Run
 init();
