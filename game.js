@@ -88,7 +88,7 @@ function init() {
     
     // 1. Bloom
     const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-    bloomPass.threshold = 0.5; // 提高阈值，防止车身和普通物体发光，只有高亮物体才发光
+    bloomPass.threshold = 0.6; // 提高阈值，只有发光部件才Bloom，防止车身泛白
     bloomPass.strength = 1.0;  // 稍微降低强度
     bloomPass.radius = 0.5;
 
@@ -125,14 +125,14 @@ function init() {
 }
 
 function createLights() {
-    const ambient = new THREE.AmbientLight(0xffffff, 2.0); // 增强环境光，让模型颜色更饱和
+    const ambient = new THREE.AmbientLight(0xffffff, 1.0); // 提高环境光
     scene.add(ambient);
-    const sunLight = new THREE.DirectionalLight(0xff00ff, 2.0); // 增强主光源
+    const sunLight = new THREE.DirectionalLight(0xff00ff, 1.5);
     sunLight.position.set(0, 20, -100);
     scene.add(sunLight);
     
-    // 增加一个照亮车身的顶光
-    const spotLight = new THREE.DirectionalLight(0xffffff, 1.5); // 改为白光，还原车漆原色
+    // 增加一个照亮车身的顶光 (纯白)，还原车漆颜色
+    const spotLight = new THREE.DirectionalLight(0xffffff, 2.0);
     spotLight.position.set(0, 50, 20);
     scene.add(spotLight);
 }
@@ -228,12 +228,12 @@ function createPlayer() {
             // 材质增强：让车身反光
             model.traverse((o) => {
                 if (o.isMesh) {
-                    // 车轮旋转逻辑需要在这里标记 mesh
-                    // 假设轮子的名字里包含 "Wheel" (通常规范模型都是这样)
-                    if (o.name.includes('Wheel') || o.name.includes('wheel') || o.name.includes('Tire')) {
+                    // 识别车轮
+                    if (o.name.toLowerCase().includes('wheel') || o.name.toLowerCase().includes('tire')) {
                         o.userData.isWheel = true;
+                        // 修正车轮中心点问题（如果需要）
                     }
-                    
+
                     o.material.envMapIntensity = 1;
                     o.castShadow = true;
                     o.receiveShadow = true;
@@ -412,6 +412,13 @@ function updatePhysics(dt) {
     playerCar.position.x = THREE.MathUtils.lerp(playerCar.position.x, targetX, dt * 10);
     const tilt = (playerCar.position.x - targetX) * -0.05;
     playerCar.rotation.z = tilt;
+
+    // 6. Rotate Wheels
+    playerCar.traverse((o) => {
+        if (o.userData.isWheel) {
+            o.rotation.x += state.speed * 0.5; 
+        }
+    });
 }
 
 function removeObstacle(index) {
