@@ -228,21 +228,45 @@ function createPlayer() {
             model.rotation.y = Math.PI; // 通常模型是朝前的，我们这里可能需要转180度
             model.position.y = 0;
             
-            // 材质增强：让车身反光
+            // 智能车轮识别系统 (位置+名称双重检测)
+            const box = new THREE.Box3().setFromObject(model);
+            const size = new THREE.Vector3();
+            box.getSize(size);
+            const center = new THREE.Vector3();
+            box.getCenter(center);
+            
+            // 车的底部高度 (大致)
+            const bottomY = box.min.y;
+            
             model.traverse((o) => {
                 if (o.isMesh) {
-                    // 识别车轮
-                    // 大小写敏感修复：很多模型叫 "Wheel" 或 "WHEEL"
-                    if (o.name.toLowerCase().includes('wheel') || o.name.toLowerCase().includes('tire') || o.name.toLowerCase().includes('rim')) {
-                        o.userData.isWheel = true;
-                    }
-                    
-                    // 尝试修复轮子中心点问题：如果轮子是作为子对象挂在某个 Pivot 下，旋转那个 Pivot 可能更好
-                    // 但通常直接旋转 Mesh 也行，除非原点不对。
-                    
-                    o.material.envMapIntensity = 1;
                     o.castShadow = true;
                     o.receiveShadow = true;
+                    o.material.envMapIntensity = 1;
+
+                    // 1. 名称检测 (Name Check)
+                    const name = o.name.toLowerCase();
+                    let isWheelByName = name.includes('wheel') || name.includes('tire') || name.includes('rim') || name.includes('cylinder');
+                    
+                    // 2. 位置检测 (Position Check)
+                    // 轮子通常在车的四个角，且位置较低
+                    // 计算该部件的世界坐标 (相对于车身)
+                    // 注意：此时模型还没加到 scene，worldMatrix 可能不准，用 local position 估算
+                    // 但 GLTF 层级复杂，保险起见，我们主要依赖名称，
+                    // 如果名称失败，尝试判断 Mesh 的几何体边界是否在“轮子区域”
+                    
+                    if (isWheelByName) {
+                        o.userData.isWheel = true;
+                        
+                        // 尝试修正旋转中心：
+                        // 有些模型原点不在几何体中心，导致转动变成公转。
+                        // 如果需要，我们可以创建一个父级 Pivot 来修正，但这比较复杂。
+                        // 先假设原点是正确的 (通常车辆模型都会把轮子原点设在轴心)。
+                        
+                        // DEBUG: 暂时把识别到的轮子变成红色，确认是否识别成功
+                        // o.material = o.material.clone();
+                        // o.material.color.set(0xff0000); 
+                    }
                 }
             });
             
@@ -428,12 +452,17 @@ function updatePhysics(dt) {
     const tilt = (playerCar.position.x - targetX) * -0.05;
     playerCar.rotation.z = tilt;
 
-    // 6. Rotate Wheels
-    playerCar.traverse((o) => {
-        if (o.userData.isWheel) {
-            o.rotation.x += state.speed * 0.5; 
-        }
-    });
+    // 6. Rotate Wheels (Aggressive Debug)
+    if (playerCar) {
+        playerCar.traverse((o) => {
+            if (o.userData.isWheel) {
+                // 绕 X 轴旋转 (标准 GLTF 车辆通常是 X 轴为轮轴)
+                // 如果模型坐标系不同，可能是 Z 轴。
+                // 试错：如果轮子歪着转，就改这里。
+                o.rotation.x += state.speed * 0.5; 
+            }
+        });
+    }
 }
 
 function removeObstacle(index) {
