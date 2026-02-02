@@ -365,12 +365,16 @@ function updatePhysics(dt) {
         if (obj.position.z > 20) {
             removeObstacle(i);
             // Spawn next gate logic
-            if (obstacles.length === 0) {
+            // 只有当所有障碍物都被清除时，才生成下一道
+            // 注意：这里需要配合 gateCooldown 防止瞬间重复触发
+            if (obstacles.length === 0 && gateCooldown <= 0) {
                 // Delay spawn
                 setTimeout(() => spawnGate(), 500); 
             }
         }
     }
+    
+    if (gateCooldown > 0) gateCooldown -= dt * 1000;
 
     // 3. Camera Effects (FOV Boost)
     const targetFov = state.boost ? CFG.fovBoost : CFG.fovBase;
@@ -396,6 +400,11 @@ function removeObstacle(index) {
     scene.remove(obj);
     if(obj.userData.domElement) obj.userData.domElement.remove();
     obstacles.splice(index, 1);
+    
+    // 如果是因为碰撞而移除的（即不是自然移出屏幕），也要检查是否需要生成下一关
+    if (obstacles.length === 0 && gateCooldown <= 0) {
+        setTimeout(() => spawnGate(), 500);
+    }
 }
 
 function handleCollision(gate) {
