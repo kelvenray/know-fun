@@ -16,9 +16,9 @@ const state = {
 
 // --- Constants ---
 const CFG = {
-    laneWidth: 10,
-    baseSpeed: 1.0,  // 稍微提升基础速度
-    boostSpeed: 6.0, // NITRO 速度翻倍！(2.5 -> 6.0)
+    laneWidth: 16, // 加宽赛道间距 (10 -> 16)，让选项离得更远
+    baseSpeed: 1.0,  
+    boostSpeed: 6.0, 
     cameraHeight: 5,
     cameraDist: 14,
     fovBase: 60,
@@ -435,7 +435,14 @@ function updateLabels() {
         if (obj.userData.domElement) {
             const el = obj.userData.domElement;
             const pos = obj.position.clone();
-            pos.y += 5; // Above gate
+            
+            // 优化：根据距离调整标签的垂直位置
+            // 距离越远，标签越高，防止被地平线切掉
+            // 距离越近，标签越低，贴近门
+            const dist = Math.abs(pos.z - camera.position.z);
+            const yOffset = dist > 100 ? 8 : 5; 
+            
+            pos.y += yOffset; 
             pos.project(camera);
 
             const x = (pos.x * .5 + .5) * window.innerWidth;
@@ -446,9 +453,11 @@ function updateLabels() {
                 el.style.left = `${x}px`;
                 el.style.top = `${y}px`;
                 el.style.display = 'block';
-                // Fade by distance
-                const dist = obj.position.z - camera.position.z; // negative
-                // Simple opacity
+                
+                // 距离太远时，稍微缩小一点字体，避免挤在一起
+                // 或者我们可以根据 x 轴差异强制分开？
+                // 其实加宽 laneWidth 是最直接的。
+                
                 el.style.opacity = 1; 
             } else {
                 el.style.display = 'none';
