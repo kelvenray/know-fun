@@ -5,6 +5,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { AfterimagePass } from 'three/addons/postprocessing/AfterimagePass.js';
+import { audioEngine } from './audio.js'; // 音频引擎
 
 // --- Global State ---
 const state = {
@@ -123,7 +124,11 @@ async function init() {
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
     
-    document.getElementById('btn-campaign').addEventListener('click', startGame);
+    // 启动游戏时初始化音频
+    document.getElementById('btn-campaign').addEventListener('click', () => {
+        audioEngine.init(); // 用户交互后初始化音频
+        startGame();
+    });
     
     const nitroBtn = document.getElementById('nitro-btn');
     const setBoost = (active) => { 
@@ -601,9 +606,11 @@ function handleCollision(gate) {
         state.score += 100;
         document.getElementById('disp-score').innerText = state.score;
         document.getElementById('question-panel').style.borderColor = "#0f0";
+        audioEngine.playSound('correct'); // 正确音效
     } else {
         document.getElementById('question-panel').style.borderColor = "#f00";
         state.speed = 0; 
+        audioEngine.playSound('wrong'); // 错误音效
     }
     setTimeout(() => {
         document.getElementById('question-panel').style.borderColor = "rgba(0, 255, 255, 0.3)";
@@ -638,11 +645,17 @@ function onKeyDown(e) {
     if (state.screen !== 'game') return;
     if (e.key === 'a' || e.key === 'ArrowLeft') state.lane = -1;
     if (e.key === 'd' || e.key === 'ArrowRight') state.lane = 1;
-    if (e.code === 'Space' || e.key === 'w' || e.key === 'ArrowUp') state.boost = true;
+    if (e.code === 'Space' || e.key === 'w' || e.key === 'ArrowUp') {
+        state.boost = true;
+        audioEngine.setNitro(true); // 氮气音效
+    }
 }
 
 function onKeyUp(e) {
-    if (e.code === 'Space' || e.key === 'w' || e.key === 'ArrowUp') state.boost = false;
+    if (e.code === 'Space' || e.key === 'w' || e.key === 'ArrowUp') {
+        state.boost = false;
+        audioEngine.setNitro(false);
+    }
 }
 
 function onWindowResize() {
@@ -657,6 +670,12 @@ function animate() {
     const dt = clock.getDelta();
     updatePhysics(dt);
     document.getElementById('disp-speed').innerText = Math.floor(state.speed * 300);
+    
+    // 更新引擎声音
+    if (state.screen === 'game') {
+        audioEngine.updateEngine(state.speed);
+    }
+    
     composer.render();
 }
 
